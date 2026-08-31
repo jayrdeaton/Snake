@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "Snake",
+    "slug": "Snake",
+    "version": "0.0.0",
+    "scheme": "snake",
+    "description": "A classic Snake game with Solo, Vs CPU, and local 2-player pass-and-play modes.",
+    "orientation": "portrait",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "userInterfaceStyle": "automatic",
+    "web": {
+      "bundler": "metro"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "icon": "./assets/images/dark-icon.png",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.infinitetoken.Snake",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIViewControllerBasedStatusBarAppearance": false
+      },
+      "icon": {
+        "dark": "./assets/images/dark-icon.png",
+        "light": "./assets/images/light-icon.png"
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.infinitetoken.tastic"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.infinitetoken.snake",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/light-splash.png",
+          "imageWidth": 200,
+          "backgroundColor": "#F0F0F0",
+          "dark": {
+            "image": "./assets/images/dark-splash.png",
+            "backgroundColor": "#0F0F0F"
+          }
+        }
+      ],
+      "expo-asset",
+      "expo-audio"
+    ],
+    "extra": {
+      "router": {}
+    }
+  }
+}
