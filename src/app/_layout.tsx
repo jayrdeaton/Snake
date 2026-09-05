@@ -4,6 +4,7 @@ import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 
 import { Providers } from '@/components/Providers'
+import { GameStatsProvider } from '@/hooks/useGameStats'
 import { ProfilesProvider } from '@/hooks/useProfiles'
 
 SplashScreen.preventAutoHideAsync()
@@ -24,8 +25,8 @@ const RootNavigator = () => {
       }}
     >
       {/* (tabs) removed — that group's directory was already deleted in an earlier phase, and
-      this app has no tab bar; its real screens are the title screen, the loadout screen (Vs
-      CPU/2 Player only — see loadout.tsx), the game itself, and profile management. */}
+      this app has no tab bar; its real screens are the title screen, the loadout screen (1
+      Player/2 Player — see loadout.tsx), the game itself, and profile management. */}
       <Stack.Screen name='index' />
       <Stack.Screen name='loadout' />
       <Stack.Screen name='game' />
@@ -49,9 +50,17 @@ const RootLayout = () => {
       the committed orientation survive screen navigation (index -> game and back), instead of
       each screen's own hook instance restarting from a default guess on every mount. */}
       <AccelerometerOrientationProvider>
-        <ProfilesProvider>
-          <RootNavigator />
-        </ProfilesProvider>
+        {/* GameStatsProvider wraps ProfilesProvider, not the other way around, so its own
+        AsyncStorage-backed achievements/stats load starts immediately and independently — it has
+        no lazy-initializer race of its own to guard against (see useGameStats.tsx), so it must
+        stay outside the 'profiles' splash gate ProfilesProvider wraps its children in below.
+        Everything ProfilesProvider actually renders (RootNavigator, and every screen it owns,
+        /loadout included) sits inside that gate instead. */}
+        <GameStatsProvider>
+          <ProfilesProvider>
+            <RootNavigator />
+          </ProfilesProvider>
+        </GameStatsProvider>
       </AccelerometerOrientationProvider>
     </Providers>
   )

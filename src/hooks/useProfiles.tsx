@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { isSharedProfileStoreAvailable, loadSharedProfiles, Profile, saveSharedProfiles } from '@tastic/profile'
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { AppState } from 'react-native'
 
 import { SnakeId } from '@/types'
 import { DEFAULT_LOCAL_PROFILES_STATE, isValidLocalProfilesState, LocalProfilesState } from '@/utils/profilesValidation'
+import { SplashGate } from '@/utils/splashGate'
 
 const STORAGE_KEY = 'snake.profiles'
 // Same group id BoxHockey and LightCycles both declare in app.json's ios.entitlements (and any
@@ -20,6 +22,12 @@ interface CreateProfileInput {
 interface ProfilesContextValue {
   profiles: Profile[]
   lastSelected: Record<SnakeId, string | null>
+  // True once the initial load (local AsyncStorage, plus the shared store too when
+  // isSharedProfileStoreAvailable) has fully resolved — see ProfilesProvider's own doc. Marks the
+  // 'profiles' splash gate (utils/splashGate.ts) and gates ProfilesProvider's own children, so a
+  // lazy useState initializer downstream (like loadout.tsx's own p1Color/p2Color) never locks onto
+  // a stale/empty profiles list.
+  loaded: boolean
   createProfile: (input: CreateProfileInput) => Profile
   updateProfile: (id: string, patch: Partial<CreateProfileInput>) => void
   // Also clears lastSelected for any seat currently pointing at this id, so /loadout immediately
@@ -56,6 +64,14 @@ export function ProfilesProvider({ children }: Props) {
   // null until the initial load below resolves — distinguishes "still loading" from "loaded, and
   // genuinely empty," which matters for the one-time seed-from-local migration in that same effect.
   const [sharedBase, setSharedBase] = useState<Profile[] | null>(null)
+  // False until the load effect below fully settles — both the local AsyncStorage read AND, when
+  // isSharedProfileStoreAvailable, the shared-store read. Surfaced on context and used to gate this
+  // provider's own children below (see the returned JSX at the bottom of this function).
+  const [loaded, setLoaded] = useState(false)
+  // True for the duration of an in-flight saveSharedProfiles write — see persistBase and the
+  // AppState foreground-reload effect below, which skips a refresh while this is true rather than
+  // risk reading back a pre-write snapshot and reverting the change that's still landing.
+  const pendingWriteRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -76,6 +92,7 @@ export function ProfilesProvider({ children }: Props) {
 
       if (!isSharedProfileStoreAvailable) {
         setSharedBase(stored.localBase)
+        setLoaded(true)
         return
       }
       const shared = await loadSharedProfiles(SHARED_GROUP_ID)
@@ -89,9 +106,34 @@ export function ProfilesProvider({ children }: Props) {
       const seeded = shared.length === 0 && stored.localBase.length > 0 ? stored.localBase : shared
       if (seeded !== shared) saveSharedProfiles(SHARED_GROUP_ID, seeded).catch(() => {})
       setSharedBase(seeded)
+      setLoaded(true)
     })()
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // The shared store doesn't push — @tastic/profile's sharedProfileStore.ts is a plain
+  // UserDefaults(suiteName:) read/write with no cross-process change notification. Re-reading on
+  // foreground is what catches "created/edited a profile in the other app, then switched back to
+  // this one" — otherwise sharedBase only ever reflects what this app itself last wrote, until the
+  // next cold start. Skipped while pendingWriteRef is still true: persistBase below never awaits
+  // its own saveSharedProfiles call, so backgrounding right after a create/edit/delete and
+  // foregrounding again before that write actually lands could otherwise read back a pre-write
+  // snapshot here and silently revert it. This only ever skips one redundant refresh — the next
+  // real foreground event, by which point the write has landed, reads correctly.
+  useEffect(() => {
+    if (!isSharedProfileStoreAvailable) return
+    let cancelled = false
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' || pendingWriteRef.current) return
+      loadSharedProfiles(SHARED_GROUP_ID).then((shared) => {
+        if (!cancelled) setSharedBase(shared)
+      })
+    })
+    return () => {
+      cancelled = true
+      sub.remove()
     }
   }, [])
 
@@ -103,12 +145,28 @@ export function ProfilesProvider({ children }: Props) {
   // Writes the base roster to whichever store is authoritative — the shared App Group roster when
   // available, this app's own local `localBase` fallback otherwise — and always updates the
   // in-memory sharedBase, which is the source for `profiles` below regardless of which backend it
-  // actually came from.
+  // actually came from. `extraLocalPatch` lets a caller fold another `local` change (currently just
+  // `lastSelected`, from deleteProfile) into the SAME persistLocal call as the `localBase` write
+  // below, rather than issuing a second call that would spread the stale pre-update `local` closure
+  // and silently revert this one (both calls happen synchronously within one event handler, so
+  // `local` never reflects the first call's setLocal by the time the second one reads it).
+  // saveSharedProfiles itself never rejects (see @tastic/profile's own doc), so the trailing
+  // `.catch` below is just defensive; pendingWriteRef is what the AppState foreground-reload effect
+  // above actually checks.
   const persistBase = useCallback(
-    (next: Profile[]) => {
+    (next: Profile[], extraLocalPatch?: Partial<LocalProfilesState>) => {
       setSharedBase(next)
-      if (isSharedProfileStoreAvailable) saveSharedProfiles(SHARED_GROUP_ID, next).catch(() => {})
-      else persistLocal({ ...local, localBase: next })
+      if (isSharedProfileStoreAvailable) {
+        pendingWriteRef.current = true
+        saveSharedProfiles(SHARED_GROUP_ID, next)
+          .catch(() => {})
+          .finally(() => {
+            pendingWriteRef.current = false
+          })
+        if (extraLocalPatch) persistLocal({ ...local, ...extraLocalPatch })
+      } else {
+        persistLocal({ ...local, localBase: next, ...extraLocalPatch })
+      }
     },
     [local, persistLocal]
   )
@@ -133,13 +191,18 @@ export function ProfilesProvider({ children }: Props) {
 
   const deleteProfile = useCallback(
     (id: string) => {
-      persistBase((sharedBase ?? []).filter((p) => p.id !== id))
-      persistLocal({
-        ...local,
-        lastSelected: { 1: local.lastSelected[1] === id ? null : local.lastSelected[1], 2: local.lastSelected[2] === id ? null : local.lastSelected[2] }
-      })
+      // Folded into persistBase's own extraLocalPatch rather than a second, separate persistLocal
+      // call — see persistBase's doc for why a second call here would spread the stale pre-delete
+      // `local` closure and silently revert `localBase` right back to including this profile on
+      // Android/web/non-prebuilt-iOS.
+      persistBase(
+        (sharedBase ?? []).filter((p) => p.id !== id),
+        {
+          lastSelected: { 1: local.lastSelected[1] === id ? null : local.lastSelected[1], 2: local.lastSelected[2] === id ? null : local.lastSelected[2] }
+        }
+      )
     },
-    [sharedBase, local, persistBase, persistLocal]
+    [sharedBase, local, persistBase]
   )
 
   const selectProfile = useCallback(
@@ -149,7 +212,19 @@ export function ProfilesProvider({ children }: Props) {
     [local, persistLocal]
   )
 
-  return <ProfilesContext.Provider value={{ profiles: sharedBase ?? [], lastSelected: local.lastSelected, createProfile, updateProfile, deleteProfile, selectProfile }}>{children}</ProfilesContext.Provider>
+  return (
+    <ProfilesContext.Provider value={{ profiles: sharedBase ?? [], lastSelected: local.lastSelected, loaded, createProfile, updateProfile, deleteProfile, selectProfile }}>
+      {/* Withholds children — everything downstream of this provider, including /loadout's own
+      lazy useState(() => profile?.color ...) initializers — until the load effect above has fully
+      resolved, so nothing can lock onto the guest-color fallback the way loadout.tsx used to when
+      it raced ahead of this provider's async reads. See utils/splashGate.ts and
+      @rific/splash-gate's own README ("Guarding against a child that renders before its data
+      does") for the general pattern this follows. */}
+      <SplashGate gate='profiles' ready={loaded}>
+        {children}
+      </SplashGate>
+    </ProfilesContext.Provider>
+  )
 }
 
 export function useProfiles() {

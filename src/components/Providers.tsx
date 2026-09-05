@@ -2,6 +2,7 @@ import { Drawer } from '@rific/drawer'
 import { FeedbackPressProvider, hapticActions, type HapticSettings, soundActions, type SoundSettings } from '@rific/feedback-press'
 import { scrollViewActions, type ScrollViewSettings, ScrollViewSettingsProvider } from '@rific/scroll-view'
 import { type HistoryContainerProps, HistoryModal, Toaster, ToastProvider } from '@rific/toaster'
+import { useEdgeGestureGuard } from '@tastic/edge-guard'
 import * as Haptics from 'expo-haptics'
 import React, { useCallback } from 'react'
 import { useWindowDimensions } from 'react-native'
@@ -42,6 +43,18 @@ const FeedbackBridge = ({ children }: ProvidersProps) => {
   )
 }
 
+// Drives @tastic/edge-guard's native UserDefaults mirror on every change — including the initial
+// redux-persist rehydration, since PersistGate below already gates children until that resolves —
+// as AsyncStorage-backed Redux state and UserDefaults (what the guard's native swizzle reads) are
+// otherwise two independent stores that only this keeps in sync. Mirrors LightCycles'
+// useGameSettings.tsx's own call site of this hook, just sourced from Redux instead of that app's
+// separate AsyncStorage-backed settings context.
+const EdgeGuardBridge = ({ children }: ProvidersProps) => {
+  const deferBottomEdgeGestures = useSelector((state: RootState) => state.game.deferBottomEdgeGestures)
+  useEdgeGestureGuard(deferBottomEdgeGestures)
+  return <>{children}</>
+}
+
 const ScrollViewBridge = ({ children }: ProvidersProps) => {
   const scrollView = useSelector((state: RootState) => state.scrollView)
   const dispatch = useDispatch()
@@ -59,18 +72,20 @@ export const Providers = ({ children }: ProvidersProps) => {
       <SafeAreaProvider>
         <ReduxProvider store={store}>
           <PersistGate persistor={persistor}>
-            <FeedbackBridge>
-              <ScrollViewBridge>
-                <KeyboardProvider>
-                  <Theme>
-                    <ToastProvider haptics={Haptics} paper={RNPaper}>
-                      {children}
-                      <Toaster historyModal={<HistoryModal Container={HistoryDrawerContainer} />} />
-                    </ToastProvider>
-                  </Theme>
-                </KeyboardProvider>
-              </ScrollViewBridge>
-            </FeedbackBridge>
+            <EdgeGuardBridge>
+              <FeedbackBridge>
+                <ScrollViewBridge>
+                  <KeyboardProvider>
+                    <Theme>
+                      <ToastProvider haptics={Haptics} paper={RNPaper}>
+                        {children}
+                        <Toaster historyModal={<HistoryModal Container={HistoryDrawerContainer} />} />
+                      </ToastProvider>
+                    </Theme>
+                  </KeyboardProvider>
+                </ScrollViewBridge>
+              </FeedbackBridge>
+            </EdgeGuardBridge>
           </PersistGate>
         </ReduxProvider>
       </SafeAreaProvider>

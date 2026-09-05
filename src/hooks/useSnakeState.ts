@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { SNAKE_TICK_INTERVAL_MS } from '@/constants/snake'
-import { Direction, GamePhase, GridSize, SnakeId } from '@/types'
-import { applyCpuSnakeTurn, CpuDifficulty } from '@/utils/snakeAi'
-import { applySnakeTurnIntent, createInitialSnakeState, tickSnake } from '@/utils/snakeEngine'
+import { SNAKE_SPEED_TIER_INTERVAL_MS } from '@/constants/snake'
+import { Direction, GamePhase, GridSize, SnakeId, SnakeRoundSettings } from '@/types'
+import { applyCpuSnakePowerupActivation, applyCpuSnakeTurn, CpuDifficulty } from '@/utils/snakeAi'
+import { applySnakePowerupActivation, applySnakeTurnIntent, createInitialSnakeState, tickSnake } from '@/utils/snakeEngine'
 
 // The three ways to play (see the plan's Context section) — lives here rather than in
 // types/index.ts since it's a screen/hook-layer routing concern, not part of the pure engine's own
@@ -31,15 +31,15 @@ const CPU_SNAKE_ID: SnakeId = 2
 // overlay gating input, not a phase this hook tracks). Snake's engine ALSO starts `phase: 'playing'`
 // the instant createInitialSnakeState runs (see that function), but the tick loop below must not
 // start advancing the round until the screen's own onboarding countdown finishes — hence a second,
-// outer phase (GamePhase, from types/index.ts): 'onboarding' (pre-round, tick loop torn down) →
-// 'playing' (beginPlaying called, tick loop runs) → 'gameOver' (the engine's own phase flipped to
+// outer phase (GamePhase, from types/index.ts): 'onboarding' (pre-round countdown) → 'playing'
+// (beginPlaying called, tick loop runs) → 'gameOver' (the engine's own phase flipped to
 // 'roundOver'; tick loop torn down again). The engine's inner `phase` and this outer one are
 // deliberately two different fields tracked in two different places — see SnakeGameState's own
 // comment in types/index.ts for why the engine itself has no idea an "onboarding" concept exists.
-export function useSnakeState(grid: GridSize, mode: SnakeMode, wrapEdges: boolean, cpuDifficulty: CpuDifficulty, colors?: Partial<Record<SnakeId, string>>) {
+export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRoundSettings, cpuDifficulty: CpuDifficulty, colors?: Partial<Record<SnakeId, string>>) {
   const snakeCount = snakeCountForMode(mode)
 
-  const [state, setState] = useState(() => createInitialSnakeState(grid, snakeCount, wrapEdges, colors))
+  const [state, setState] = useState(() => createInitialSnakeState(grid, snakeCount, settings, colors))
 
   // Only the two transitions this hook actually decides on its own — 'onboarding' (beginPlaying
   // not yet called) vs 'playing' (it has). Whether the outer phase has further moved on to
@@ -50,12 +50,13 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, wrapEdges: boolea
   // to `state.phase` flipping to 'roundOver' in the very same render, no extra render involved.
   const [phaseIntent, setPhaseIntent] = useState<Exclude<GamePhase, 'gameOver'>>('onboarding')
 
-  // The engine flipping its OWN phase to 'roundOver' (set inside tickSnake — see its step 11) is
-  // what ends a round; this derivation just projects that one-way transition into the outer phase
-  // the rest of this hook (and the screen) actually watches, so a game-over dialog keyed off
-  // `phase` doesn't also need to know about the engine's inner phase field. Never derives the other
-  // direction — the outer phase only ever leaves 'gameOver' via `retry` creating a brand new state
-  // (which resets `phaseIntent` to 'onboarding', and `state.phase` back to 'playing' along with it).
+  // The engine flipping its OWN phase to 'roundOver' (set inside tickSnake — see its own outcome
+  // resolution) is what ends a round; this derivation just projects that one-way transition into
+  // the outer phase the rest of this hook (and the screen) actually watches, so a game-over dialog
+  // keyed off `phase` doesn't also need to know about the engine's inner phase field. Never derives
+  // the other direction — the outer phase only ever leaves 'gameOver' via `retry` creating a brand
+  // new state (which resets `phaseIntent` to 'onboarding', and `state.phase` back to 'playing'
+  // along with it).
   const phase: GamePhase = state.phase === 'roundOver' ? 'gameOver' : phaseIntent
 
   // Turn intent goes through applySnakeTurnIntent unconditionally, regardless of which mode is
@@ -76,9 +77,16 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, wrapEdges: boolea
   //     this mode, so there's no controller to contend with.
   // In short: `turn` is a dumb, always-available choke point; *wiring* is what makes a given seat
   // human-controlled, CPU-controlled, or unreachable in a given mode, and that wiring lives in the
-  // screen/TouchInputLayer layer, not here.
+  // screen/TouchInputLayer layer, not here. `activate` below shares this exact same shape.
   const turn = useCallback((snakeId: SnakeId, direction: Direction) => {
     setState((s) => applySnakeTurnIntent(s, snakeId, direction))
+  }, [])
+
+  // Human powerup activation (tap/activate-key — see TouchInputLayer.tsx/KeyboardInputLayer.tsx) —
+  // same dumb, always-available choke point as `turn` above, and the same "wiring, not this
+  // function, decides who can reach it" responsibility split.
+  const activate = useCallback((snakeId: SnakeId) => {
+    setState((s) => applySnakePowerupActivation(s, snakeId))
   }, [])
 
   const beginPlaying = useCallback(() => {
@@ -86,9 +94,9 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, wrapEdges: boolea
   }, [])
 
   const retry = useCallback(() => {
-    setState(createInitialSnakeState(grid, snakeCount, wrapEdges, colors))
+    setState(createInitialSnakeState(grid, snakeCount, settings, colors))
     setPhaseIntent('onboarding')
-  }, [grid, snakeCount, wrapEdges, colors])
+  }, [grid, snakeCount, settings, colors])
 
   // ─── Tick loop ──────────────────────────────────────────────────────────
   // Same rAF variable-tick-rate loop structure as LightCycles' useGameState.ts: runs only while the
@@ -98,6 +106,9 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, wrapEdges: boolea
   // a fresh round never fires its first tick early against a stale timestamp from a previous round.
   const rafRef = useRef<number | null>(null)
   const lastTickRef = useRef<number | null>(null)
+
+  const tickIntervalMs = SNAKE_SPEED_TIER_INTERVAL_MS[settings.speedTier]
+  const hasPowerups = settings.enabledPowerups.length > 0
 
   useEffect(() => {
     if (phase !== 'playing') return
@@ -111,16 +122,19 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, wrapEdges: boolea
 
       const dt = timestamp - lastTickRef.current
 
-      if (dt >= SNAKE_TICK_INTERVAL_MS) {
+      if (dt >= tickIntervalMs) {
         lastTickRef.current = timestamp
         setState((s) => {
           // Mirrors LightCycles' useGameState.ts inline CPU-turn-injection splice exactly: for
-          // vsCpu, the CPU's move for THIS tick is decided and queued (applyCpuSnakeTurn sets snake
-          // 2's pendingDirection via the same applySnakeTurnIntent choke point human input uses)
-          // immediately before tickSnake consumes it — same cadence a human's queued swipe would
-          // land at, so the bot's move and the tick that consumes it commit together. Every other
-          // mode (solo, twoPlayer) has no CPU seat, so it's just a plain tickSnake call.
-          if (mode === 'vsCpu') return tickSnake(applyCpuSnakeTurn(s, CPU_SNAKE_ID, cpuDifficulty, Math.random), Math.random)
+          // vsCpu, the CPU's activation decision (if any powerups are even enabled) is made and
+          // applied FIRST, immediately before its move for THIS tick is decided and queued — same
+          // cadence a human's queued tap-then-swipe would land at, so the bot's activation, its
+          // move, and the tick that consumes them all commit together. Every other mode (solo,
+          // twoPlayer) has no CPU seat, so it's just a plain tickSnake call.
+          if (mode === 'vsCpu') {
+            const afterActivation = hasPowerups ? applyCpuSnakePowerupActivation(s, CPU_SNAKE_ID, cpuDifficulty, Math.random) : s
+            return tickSnake(applyCpuSnakeTurn(afterActivation, CPU_SNAKE_ID, cpuDifficulty, Math.random), Math.random)
+          }
           return tickSnake(s, Math.random)
         })
       }
@@ -137,10 +151,7 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, wrapEdges: boolea
         rafRef.current = null
       }
     }
-  }, [phase, mode, cpuDifficulty])
+  }, [phase, mode, cpuDifficulty, tickIntervalMs, hasPowerups])
 
-  // No speed ramp (see constants/snake.ts's own comment) — tickIntervalMs is just the one fixed
-  // constant, returned rather than hardcoded again at call sites (e.g. SnakeBoard's per-tick head
-  // glide animation duration, the same role LightCycles' returned tickIntervalMs plays there).
-  return { state, turn, beginPlaying, retry, tickIntervalMs: SNAKE_TICK_INTERVAL_MS }
+  return { state, turn, activate, beginPlaying, retry, tickIntervalMs }
 }

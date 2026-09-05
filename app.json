@@ -73,7 +73,8 @@
         }
       ],
       "expo-asset",
-      "expo-audio"
+      "expo-audio",
+      "@tastic/edge-guard"
     ],
     "extra": {
       "router": {}

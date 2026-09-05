@@ -1,3 +1,4 @@
+import { applyControlInversion } from '@tastic/input'
 import { useAccelerometerOrientation } from '@tastic/split-screen'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { StyleSheet, View } from 'react-native'
@@ -13,6 +14,18 @@ export interface TouchInputLayerProps {
   mode: TouchInputMode
   enabled: boolean
   onTurn: (snakeId: SnakeId, direction: Direction) => void
+  // Fires on a stationary tap (composed alongside the pan below, not a separate zone — see
+  // makeSnakeGesture's own comment). Always safe to wire regardless of whether powerups are even
+  // enabled this round: activate() itself no-ops when the snake holds nothing (see
+  // snakeEngine.ts's applySnakePowerupActivation).
+  onActivate: (snakeId: SnakeId) => void
+  // Whether each seat's own controls are currently Mesmerized (see types/index.ts's
+  // SnakeControlEffect) — a mesmerized seat's resolved swipe direction is inverted before onTurn
+  // ever sees it, mirroring LightCycles' identical TouchInputLayer prop. Read through a ref (see
+  // controlInvertedRef below), never a gesture dependency, so a mid-touch mesmerize landing or
+  // expiring can never force RNGH to tear down and re-attach an in-progress gesture's native
+  // recognizer.
+  controlInverted: Record<SnakeId, boolean>
 }
 
 // Two independent single-finger Pan gestures in dual mode, each on its OWN View (sized/positioned
@@ -22,7 +35,7 @@ export interface TouchInputLayerProps {
 // single shared recognizer claims which pointer and lose one or both turns; two separate native
 // views/recognizers have nothing left to race, since each only ever sees the pointer that landed on
 // it. The board underneath still stays one undivided render — only touch handling is zoned.
-export default function TouchInputLayer({ mode, enabled, onTurn }: TouchInputLayerProps) {
+export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, controlInverted }: TouchInputLayerProps) {
   const solo = mode === 'solo'
   const { orientationMode, p1OnRight } = useAccelerometerOrientation()
 
@@ -30,14 +43,28 @@ export default function TouchInputLayer({ mode, enabled, onTurn }: TouchInputLay
   // builds) can stay referentially stable across renders — same rationale as LightCycles'
   // TouchInputLayer.tsx: RNGH tears down and re-attaches its native recognizer on every new gesture
   // object handed to GestureDetector, and a touch that starts mid-rebuild loses its recognizer
-  // state entirely.
+  // state entirely. controlInverted rides the same ref-not-dependency treatment for the identical
+  // reason — a mesmerize landing or expiring mid-touch must never invalidate an in-progress gesture.
   const onTurnRef = useRef(onTurn)
   useEffect(() => {
     onTurnRef.current = onTurn
   })
+  const onActivateRef = useRef(onActivate)
+  useEffect(() => {
+    onActivateRef.current = onActivate
+  })
+  const controlInvertedRef = useRef(controlInverted)
+  useEffect(() => {
+    controlInvertedRef.current = controlInverted
+  })
 
   const handleTurn = useCallback((snakeId: SnakeId, direction: Direction) => {
-    onTurnRef.current(snakeId, direction)
+    const inverted = controlInvertedRef.current[snakeId]
+    onTurnRef.current(snakeId, inverted ? applyControlInversion(direction, true) : direction)
+  }, [])
+
+  const handleActivate = useCallback((snakeId: SnakeId) => {
+    onActivateRef.current(snakeId)
   }, [])
 
   // Per-snake drag state, read/written from the UI-thread gesture worklets below (never touched
@@ -51,12 +78,15 @@ export default function TouchInputLayer({ mode, enabled, onTurn }: TouchInputLay
 
   // Resolves a turn continuously during the drag (onUpdate) instead of once at release, so a
   // player can chain several turns within one continuous touch without lifting their finger — see
-  // LightCycles' TouchInputLayer.tsx's makePlayerGesture for the full rationale, ported unmodified
-  // here aside from dropping the Gesture.Tap/onActivate composition entirely: Snake has no
-  // held-item/activate action, so every zone is a bare Gesture.Pan.
+  // LightCycles' TouchInputLayer.tsx's makePlayerGesture for the full rationale. Composed with a
+  // Gesture.Tap for powerup activation (a stationary tap, not a drag) via Gesture.Simultaneous, so
+  // both recognizers share the exact same zone rather than needing a separate hit-target — the
+  // `.hitSlop({})` on the pan below is the exact workaround LightCycles' own TouchInputLayer.tsx
+  // needs to make that composition register at all, and it was already here before Tap ever needed
+  // it.
   const makeSnakeGesture = useCallback(
     (snakeId: SnakeId, base: SharedValue<{ x: number; y: number }>, lastDirection: SharedValue<Direction | null>) => {
-      return Gesture.Pan()
+      const pan = Gesture.Pan()
         .maxPointers(1)
         .minDistance(0)
         .hitSlop({})
@@ -77,8 +107,14 @@ export default function TouchInputLayer({ mode, enabled, onTurn }: TouchInputLay
             runOnJS(handleTurn)(snakeId, direction)
           }
         })
+
+      const tap = Gesture.Tap()
+        .enabled(enabled)
+        .onEnd(() => runOnJS(handleActivate)(snakeId))
+
+      return Gesture.Simultaneous(pan, tap)
     },
-    [enabled, handleTurn]
+    [enabled, handleTurn, handleActivate]
   )
 
   const soloGesture = useMemo(() => (solo ? makeSnakeGesture(1, snake1Base, snake1LastDirection) : null), [solo, makeSnakeGesture]) // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/refs -- snake1Base/snake1LastDirection are stable SharedValue refs (like useRef), not reactive state; SharedValue.value is only ever read inside worklet/event callbacks, never synchronously during render

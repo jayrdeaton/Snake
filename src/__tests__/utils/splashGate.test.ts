@@ -9,7 +9,7 @@ describe('splashGate', () => {
   it('declares exactly the gates this app currently depends on', () => {
     // Each createGate() import gets its own module instance in a fresh test file, so this
     // reads the still-pending set before anything in this file has marked one ready.
-    expect(pendingSplashGates().sort()).toEqual(['fonts', 'theme'])
+    expect(pendingSplashGates().sort()).toEqual(['fonts', 'profiles', 'theme'])
   })
 
   it('exposes markReady and useReady as callable functions', () => {

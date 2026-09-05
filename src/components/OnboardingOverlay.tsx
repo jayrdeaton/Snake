@@ -1,3 +1,4 @@
+import { useAutoPaperTheme } from '@rific/auto-paper'
 import { getFixedZoneRotation, getOpposingZoneRotation, useAccelerometerOrientation } from '@tastic/split-screen'
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
@@ -5,17 +6,25 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 
 
 import { ONBOARDING_COUNTDOWN_STEP_MS, ONBOARDING_FADE_MS, ONBOARDING_GO_HOLD_MS } from '@/constants/snake'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
+import { SnakeId } from '@/types'
 
 export interface OnboardingOverlayProps {
   onComplete: () => void
-  // Optional per-seat awareness for the two-rival modes (Vs CPU / 2 Player). Omitting this (or
-  // passing 'solo') renders one full-board centered countdown — an acceptable v1 on its own (see
-  // this file's header comment) — while 'dual' + `colors` splits into the same near/bottom
-  // (face-to-face) or left/right (side-by-side) zones TouchInputLayer.tsx already establishes for
-  // input, each tinted in that snake's own color, so the countdown zones never disagree with where
-  // a swipe will actually register.
-  mode?: 'solo' | 'dual'
-  colors?: { snake1: string; snake2: string }
+  // Drives the single-zone-vs-split decision below — NOT snakes.length. Vs CPU has two snakes on
+  // the board but only one human ever watching/reading this overlay, so it gets the same one,
+  // untinted-toward-a-second-seat full-board zone Solo does; only 2 Player (humanPlayers.length===2)
+  // actually needs a real second person's own half, complete with that half's own 180°-flipped
+  // digit so it reads right-side-up from THEIR physical side of the device. Mirrors LightCycles'
+  // OnboardingOverlay's identical humanPlayers-gated branch exactly (see that file's own comment) —
+  // Snake's own earlier port of this file had collapsed the distinction into a 'solo'|'dual' mode
+  // derived from snake COUNT instead of human count, which is what let Vs CPU wrongly inherit the
+  // two-real-people split treatment.
+  humanPlayers: SnakeId[]
+  // snake1 is always required — every mode has at least one (human) snake. snake2 is present
+  // whenever a second snake exists on the board at all (Vs CPU's CPU included, even though its
+  // color only actually gets used below when humanPlayers.length is 2 — i.e. Vs CPU's own CPU-
+  // colored zone is simply never rendered, matching the single-zone branch not needing it).
+  colors: { snake1: string; snake2?: string }
 }
 
 const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
@@ -27,10 +36,9 @@ const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
 // ROTATION is simplified to just the opposing seat's own 180°/±90° flip (via
 // getFixedZoneRotation/getOpposingZoneRotation) rather than threading a live `rotation` prop in
 // from the screen — this overlay has no dialog-style content of its own to keep consistent with
-// anything else, unlike SettingsDialog. Per-seat zone TINTING (`mode`/`colors` below) is kept
-// as an opt-in, since a simple single centered countdown is also an acceptable v1 (see this
-// module's own JSDoc on OnboardingOverlayProps).
-export default function OnboardingOverlay({ onComplete, mode = 'solo', colors }: OnboardingOverlayProps) {
+// anything else, unlike SettingsDialog.
+export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: OnboardingOverlayProps) {
+  const { fonts } = useAutoPaperTheme()
   const opacity = useSharedValue(1)
   const [stageIndex, setStageIndex] = useState(0)
   const { orientationMode, p1OnRight, upsideDown } = useAccelerometerOrientation()
@@ -71,13 +79,26 @@ export default function OnboardingOverlay({ onComplete, mode = 'solo', colors }:
 
   const countdown = COUNTDOWN_STAGES[stageIndex]
 
-  if (mode === 'solo' || !colors) {
+  // Solo AND Vs CPU both land here — see humanPlayers' own doc above for why snake count isn't
+  // what gates this. Tinted in the lone human's own color (snake1 — see types/index.ts's own
+  // "snake 1 is always the human" convention) rather than left plain, so this zone reads
+  // consistently with the two-zone case below instead of looking like a different, simpler mode.
+  if (humanPlayers.length === 1) {
     return (
-      <Animated.View style={[StyleSheet.absoluteFill, styles.zoneFull, animatedStyle]} pointerEvents='none'>
-        <Text style={styles.countdown}>{countdown}</Text>
+      <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]} pointerEvents='none'>
+        <View style={[styles.zone, styles.zoneFull, { borderColor: colors.snake1, backgroundColor: `${colors.snake1}22` }]}>
+          <Text style={[styles.countdown, { fontFamily: fonts.displayLarge.fontFamily }]}>{countdown}</Text>
+        </View>
       </Animated.View>
     )
   }
+
+  // Only reachable with humanPlayers.length === 2 (2 Player — the only mode with a second human at
+  // all), which always has a real second snake on the board too — colors.snake2 is only typed
+  // optional because the single-zone branch above never needs it, not because it can actually be
+  // missing here. Guards anyway rather than a non-null assertion, in case that invariant ever
+  // drifts.
+  if (!colors.snake2) return null
 
   // Mirrors TouchInputLayer.tsx's own zone split exactly (face-to-face: near/bottom = snake 1,
   // far/top = snake 2; side-by-side: whichever seat useAccelerometerOrientation says is on the
@@ -92,10 +113,10 @@ export default function OnboardingOverlay({ onComplete, mode = 'solo', colors }:
   return (
     <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]} pointerEvents='none'>
       <View style={[styles.zone, snake1Zone, { borderColor: colors.snake1, backgroundColor: `${colors.snake1}22` }]}>
-        <Text style={[styles.countdown, snake1Rotation % 360 !== 0 && { transform: [{ rotate: `${snake1Rotation}deg` }] }]}>{countdown}</Text>
+        <Text style={[styles.countdown, { fontFamily: fonts.displayLarge.fontFamily }, snake1Rotation % 360 !== 0 && { transform: [{ rotate: `${snake1Rotation}deg` }] }]}>{countdown}</Text>
       </View>
       <View style={[styles.zone, snake2Zone, { borderColor: colors.snake2, backgroundColor: `${colors.snake2}22` }]}>
-        <Text style={[styles.countdown, snake2Rotation % 360 !== 0 && { transform: [{ rotate: `${snake2Rotation}deg` }] }]}>{countdown}</Text>
+        <Text style={[styles.countdown, { fontFamily: fonts.displayLarge.fontFamily }, snake2Rotation % 360 !== 0 && { transform: [{ rotate: `${snake2Rotation}deg` }] }]}>{countdown}</Text>
       </View>
     </Animated.View>
   )
@@ -118,7 +139,14 @@ const styles = StyleSheet.create({
     position: 'absolute'
   },
   zoneBottom: { bottom: 0, left: 0, right: 0, top: '50%' },
-  zoneFull: { alignItems: 'center', justifyContent: 'center' },
+  // alignItems/justifyContent (centering the countdown digit) already come from `zone` itself —
+  // this only needs to add the four edge insets `zone`'s own bare `position: 'absolute'` doesn't
+  // supply on its own, same as zoneBottom/zoneLeft/zoneRight/zoneTop each do for their own quarter/
+  // half of the screen. Previously missing these, which silently shrank the single-zone case (see
+  // OnboardingOverlayProps' own humanPlayers doc) down to its content's own natural size instead of
+  // filling the screen — never caught before because the old solo-only render path applied
+  // StyleSheet.absoluteFill directly to the outer Animated.View instead of routing through `zone`.
+  zoneFull: { bottom: 0, left: 0, right: 0, top: 0 },
   zoneLeft: { bottom: 0, left: 0, right: '50%', top: 0 },
   zoneRight: { bottom: 0, left: '50%', right: 0, top: 0 },
   zoneTop: { bottom: '50%', left: 0, right: 0, top: 0 }

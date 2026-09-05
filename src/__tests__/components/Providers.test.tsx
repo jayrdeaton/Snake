@@ -7,7 +7,12 @@ const mockHapticProviderCalls: unknown[] = []
 jest.mock('@rific/auto-paper', () => ({
   Provider: (props: any) => props.children,
   themeActions: { initialize: (payload: unknown) => ({ payload, type: 'theme/initialize' }) },
-  themeReducer: (state = { appearance: 'auto', blur: true, color: '#4caf50', harmony: 'split-complementary' }) => state
+  themeReducer: (state = { appearance: 'auto', blur: true, color: '#4caf50', harmony: 'split-complementary' }) => state,
+  createThemeReducer:
+    (initialState: unknown) =>
+    (state = { appearance: 'system', blur: true, harmony: 'split-complementary', ...(initialState as object) }) =>
+      state,
+  getThirdColor: () => '#6122c8'
 }))
 
 jest.mock('@rific/feedback-press', () => ({

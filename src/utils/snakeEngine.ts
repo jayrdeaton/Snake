@@ -1,5 +1,7 @@
-import { Direction, GridCell, GridSize, RoundOutcome, SnakeEntity, SnakeGameState, SnakeId } from '@/types'
+import { SNAKE_POWERUP_CONSTRICT_FRACTION, SNAKE_POWERUP_EFFECT_DURATION_TICKS } from '@/constants/snake'
+import { Direction, GridCell, GridSize, RoundOutcome, SnakeControlEffect, SnakeEntity, SnakeGameState, SnakeId, SnakePortal, SnakeRoundSettings, SnakeShieldEffect, SnakeSpeedEffect, SnakeTunnel } from '@/types'
 
+import { buildArenaObstacles, buildArenaPortals, buildArenaTunnels } from './arenas'
 import { cellKey, faceToFaceSpawnPoint, isInBounds, isOppositeDirection, soloSpawnPoint, stepCell, wrapCell } from './grid'
 
 // Every snake starts as a straight 3-segment body — long enough to have a real tail distinct from
@@ -11,7 +13,10 @@ export const SNAKE_START_LENGTH = 3
 // any other caller that doesn't supply its own `colors` fall back to these. Vs CPU/2 Player let
 // /loadout override them per round (see createInitialSnakeState's own `colors` param) — the same
 // role LightCycles' `colors: Record<Player, string>` param plays for its own createInitialGameState.
-export const SNAKE_COLORS: Record<SnakeId, string> = { 1: '#3B82F6', 2: '#EF4444' }
+// Also the app's own theme identity: store.ts feeds these straight into @rific/auto-paper as the
+// primary/secondary of its color triad (tertiary derived via getThirdColor), so player 1's default
+// color IS the app's primary and player 2's default color IS its secondary — not a coincidence.
+export const SNAKE_COLORS: Record<SnakeId, string> = { 1: '#2E7D32', 2: '#FBC02D' }
 
 const REVERSE_DIRECTION: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' }
 
@@ -38,57 +43,115 @@ function buildSnake(id: SnakeId, spawn: { head: GridCell; direction: Direction }
     alive: true,
     score: 0,
     color,
-    crashCell: null
+    crashCell: null,
+    heldPowerup: null,
+    effects: { speed: null, control: null, shield: null },
+    peakLength: SNAKE_START_LENGTH
   }
 }
 
-// Every cell any snake currently occupies — the "what's blocked" set food-spawning reads from (see
-// pickRandomEmptyCell below), and a natural input for a later phase's CPU flood-fill (see the
-// plan's snakeAi.ts design, which takes an `occupied` set built the same way).
-export function buildSnakeOccupiedSet(snakes: SnakeEntity[]): Set<string> {
+// Every cell any snake currently occupies, plus the round's static arena obstacles — the shared
+// "what's blocked" set food/pickup-spawning reads from (see pickRandomEmptyCell below) and CPU
+// pathing reads from (see snakeAi.ts). `obstacles` defaults to [] so any existing call site/test
+// that only ever passed `snakes` keeps compiling and behaves exactly as before (an 'open' round has
+// none anyway).
+export function buildSnakeOccupiedSet(snakes: SnakeEntity[], obstacles: GridCell[] = []): Set<string> {
+  return occupiedFromBodies(
+    snakes.map((s) => s.body),
+    obstacles
+  )
+}
+
+function occupiedFromBodies(bodies: GridCell[][], obstacles: GridCell[]): Set<string> {
   const occupied = new Set<string>()
-  for (const snake of snakes) for (const cell of snake.body) occupied.add(cellKey(cell))
+  for (const body of bodies) for (const cell of body) occupied.add(cellKey(cell))
+  for (const cell of obstacles) occupied.add(cellKey(cell))
   return occupied
 }
 
-// Uniformly-random empty-cell scan for food placement — no clearance-radius check needed here,
-// unlike LightCycles' powerup spawn (see gameEngine.ts's hasClearCollectionArea): Snake's food is a
-// single exact-cell target a snake either lands on or doesn't, never something approached from a
-// particular direction, so "empty" is the only requirement.
-function pickRandomEmptyCell(grid: GridSize, occupied: ReadonlySet<string>, random: () => number): GridCell | null {
+// Symmetric a<->b lookup for the round's portal pair(s) — mirrors LightCycles' buildPortalLookup.
+// Portal cells are deliberately absent from buildSnakeOccupiedSet's own output — entering one
+// redirects the mover during movement resolution (see tickSnake below), it never crashes them.
+// Exported for snakeAi.ts's own lookahead, which needs the identical portal-aware stepping tickSnake
+// itself uses so the CPU's own safety scoring can never disagree with what actually happens to it.
+export function buildPortalLookup(portals: SnakePortal[]): Map<string, GridCell> {
+  const lookup = new Map<string, GridCell>()
+  for (const { a, b } of portals) {
+    lookup.set(cellKey(a), b)
+    lookup.set(cellKey(b), a)
+  }
+  return lookup
+}
+
+// Flat membership set of every cell across the round's tunnel corridor — see types/index.ts's own
+// SnakeTunnel comment for why membership alone (no per-snake exclusion layer) is enough here.
+// Exported for snakeAi.ts's own lookahead, same reasoning as buildPortalLookup above.
+export function buildTunnelCellSet(tunnels: SnakeTunnel[]): Set<string> {
+  const cells = new Set<string>()
+  for (const tunnel of tunnels) for (const cell of tunnel.cells) cells.add(cellKey(cell))
+  return cells
+}
+
+// Uniformly-random empty-cell scan for food/pickup placement — no clearance-radius check needed,
+// unlike LightCycles' powerup spawn: Snake's collectibles are a single exact-cell target a snake
+// either lands on or doesn't. `excludeCells` covers cells that are technically "empty" (no body/
+// obstacle) but still shouldn't host a collectible — portal/tunnel cells (a collectible could never
+// actually be landed on there, see buildArenaPortals' own redirect-before-any-check behavior) and,
+// new since powerups, the OTHER live collectible's own cell (food and a pickup can now be on the
+// board at once, something this app never had to keep apart before).
+function pickRandomEmptyCell(grid: GridSize, occupied: ReadonlySet<string>, random: () => number, excludeCells: ReadonlySet<string> = new Set()): GridCell | null {
   const candidates: GridCell[] = []
   for (let x = 0; x < grid.cols; x++) {
     for (let y = 0; y < grid.rows; y++) {
       const cell = { x, y }
-      if (!occupied.has(cellKey(cell))) candidates.push(cell)
+      const key = cellKey(cell)
+      if (occupied.has(key) || excludeCells.has(key)) continue
+      candidates.push(cell)
     }
   }
   if (candidates.length === 0) return null
   return candidates[Math.floor(random() * candidates.length)]
 }
 
-// `snakeCount` is 1 (Solo — a single centered body) or 2 (Vs CPU / 2 Player — identical spawn
-// either way: a face-to-face pair on opposite halves of the board, facing the shared middle).
-// `colors` lets /loadout's per-round color pickers override the SNAKE_COLORS defaults (Solo has no
-// loadout screen, so it always falls through to the defaults for its one snake). `random` defaults
-// to Math.random so every existing call site behaves normally, while a test can inject a
-// seeded/fixed generator for deterministic food placement.
-export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, wrapEdges: boolean, colors?: Partial<Record<SnakeId, string>>, random: () => number = Math.random): SnakeGameState {
+function pickupId(tick: number, cell: GridCell): string {
+  return `pu-${tick}-${cell.x}-${cell.y}`
+}
+
+// `settings.arenaVariant`/`settings.enabledPowerups` default this round's obstacle layout and
+// powerup pool; `snakeCount` is 1 (Solo) or 2 (Vs CPU / 2 Player) — identical spawn either way for
+// 2, a face-to-face pair on opposite halves of the board. `colors` lets /loadout's per-round color
+// pickers override the SNAKE_COLORS defaults. `random` defaults to Math.random so every existing
+// call site behaves normally, while a test can inject a seeded/fixed generator.
+export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, settings: SnakeRoundSettings, colors?: Partial<Record<SnakeId, string>>, random: () => number = Math.random): SnakeGameState {
   const color1 = colors?.[1] ?? SNAKE_COLORS[1]
   const color2 = colors?.[2] ?? SNAKE_COLORS[2]
   const snakes: SnakeEntity[] = snakeCount === 1 ? [buildSnake(1, soloSpawnPoint(grid), color1)] : [buildSnake(1, faceToFaceSpawnPoint(1, grid), color1), buildSnake(2, faceToFaceSpawnPoint(2, grid), color2)]
 
-  // Falls back to the origin cell only if the board is so small every cell is already a snake body
-  // segment — never expected on any real playable grid, but keeps this total rather than throwing.
-  const food = pickRandomEmptyCell(grid, buildSnakeOccupiedSet(snakes), random) ?? { x: 0, y: 0 }
+  const obstacles = buildArenaObstacles(settings.arenaVariant, grid, snakeCount)
+  const portals = buildArenaPortals(settings.arenaVariant, grid, snakeCount)
+  const tunnels = buildArenaTunnels(settings.arenaVariant, grid, snakeCount)
+  const arenaCellSet = new Set<string>([...buildTunnelCellSet(tunnels), ...buildPortalLookup(portals).keys()])
 
-  return { phase: 'playing', grid, snakes, food, wrapEdges, outcome: null, tick: 0 }
+  // Solo has no opponent, so the four opponent-targeted powerups (coldblood/constrict/mesmerize/
+  // frenzy) would never do anything — see types/index.ts's own SnakePowerupType comment. Filtered
+  // once here, into the EFFECTIVE pool stored on state, so the tick loop and pickup-spawn logic
+  // below never need mode-awareness of their own.
+  const enabledPowerups = snakeCount === 1 ? settings.enabledPowerups.filter((type) => type === 'sidewind' || type === 'scales') : settings.enabledPowerups
+
+  // Falls back to the origin cell only if the board is so small every cell is already blocked —
+  // never expected on any real playable grid, but keeps this total rather than throwing.
+  const food = pickRandomEmptyCell(grid, buildSnakeOccupiedSet(snakes, obstacles), random, arenaCellSet) ?? { x: 0, y: 0 }
+
+  return { phase: 'playing', grid, snakes, food, wrapEdges: settings.wrapEdges, outcome: null, tick: 0, obstacles, portals, tunnels, enabledPowerups, pickups: [] }
 }
 
 // Queues a turn for the next tick. Ignored outside 'playing', for a dead snake, an unknown
 // `snakeId`, a direction matching the current heading (no-op already), or a 180° reversal into the
 // snake's own body — enforced here, once, rather than by every input source (human swipe or CPU
-// decision) that could dispatch a turn. Reuses isOppositeDirection verbatim from grid.ts.
+// decision) that could dispatch a turn. Reuses isOppositeDirection verbatim from grid.ts. A snake
+// currently frozen (Coldblood, 0 steps this tick) can still queue a turn here — it just won't move
+// until it unfreezes; see tickSnake's own direction/pendingDirection resolution for why that's safe
+// across multiple frozen ticks.
 export function applySnakeTurnIntent(state: SnakeGameState, snakeId: SnakeId, direction: Direction): SnakeGameState {
   if (state.phase !== 'playing') return state
   const snake = state.snakes.find((s) => s.id === snakeId)
@@ -100,101 +163,279 @@ export function applySnakeTurnIntent(state: SnakeGameState, snakeId: SnakeId, di
   return { ...state, snakes: state.snakes.map((s) => (s.id === snakeId ? { ...s, pendingDirection: direction } : s)) }
 }
 
-// Advances the round exactly one tick. Resolution order (see the plan's Engine design section):
-//   1. No-op if `phase !== 'playing'`.
-//   2-3. Each alive snake resolves `pendingDirection ?? direction` and its intended next head
-//        cell; `wrapEdges` re-enters an off-grid destination from the opposite edge, otherwise an
-//        out-of-bounds destination is a wall death.
-//   4. Determine which (still-alive, not-wall-dead) snakes are landing on the food cell this tick.
-//   5. Build a `vacating` set from every alive, non-growing snake's CURRENT tail cell — a cell
-//      about to be empty is safe to step into for ANY snake, not just its own owner (a growing
-//      snake keeps its tail, so it does NOT vacate).
-//   6. Head-to-head: any two snakes whose next cell coincides both die — resolved BEFORE body
-//      collision, so an exact-same-cell race (including a shared-food race) is always a mutual
-//      death, never a body-collision "win" for whichever happens to be checked first.
-//   7. Body collision: a snake dies if its next cell is in the union of every alive snake's CURRENT
-//      body minus the `vacating` set — covers self-collision and other-snake-body collision with
-//      one check.
-//   8-9. Growth (keep tail, append head, +1 score) for a food-landing survivor; a normal move (drop
-//        tail, append head) for every other survivor.
-//   10. Food respawn, once, if anyone ate it this tick — checked against every snake's post-tick
-//       body. At most one snake can ever be `growing` in a single tick (two landing on the same
-//       food cell is already a head-to-head death at step 6), so this never double-spawns.
-//   11. Round outcome — only meaningful when `snakes.length === 2`: both dying this tick is a draw,
-//       one dying is a win for the survivor, and the round ends immediately (this function's own
-//       phase !== 'playing' no-op guard stops any further tick, so the survivor never keeps playing
-//       solo). For `snakes.length === 1`, a death just flips `phase` to 'roundOver'; `outcome` stays
-//       whatever it already was (null, since a solo round never sets it).
+// Cells advanced in one tickSnake sub-step loop for a boosted/frozen snake — Coldblood's 0 isn't a
+// multiplier lookup, it's "skip movement entirely," checked first and explicitly. Mirrors
+// LightCycles' stepsFor exactly. Exported so snakeAi.ts's own survival scoring can walk the same
+// number of cells ahead for itself when boosted, rather than a second, potentially-drifting copy.
+export function stepsForSnake(effects: SnakeEntity['effects']): number {
+  if (effects.speed?.multiplier === 0) return 0
+  if (effects.speed?.multiplier === 2) return 2
+  return 1
+}
+
+// Effect expiry — cleared once `tick` has fully consumed the effect's own expiresAtTick. Applied
+// unconditionally, every tick, to every snake (harmless for a snake that died this same tick, since
+// the round is already over) — mirrors LightCycles' own `expire`.
+function expireEffects(effects: SnakeEntity['effects'], tick: number): SnakeEntity['effects'] {
+  return {
+    speed: effects.speed && tick >= effects.speed.expiresAtTick ? null : effects.speed,
+    control: effects.control && tick >= effects.control.expiresAtTick ? null : effects.control,
+    shield: effects.shield && tick >= effects.shield.expiresAtTick ? null : effects.shield
+  }
+}
+
+// Slices `count` cells off the front (the tail end — see SnakeEntity.body's own convention),
+// clamped so the head is never removed. Shared by Constrict's instant application below.
+function trimSnakeBodyFront(body: GridCell[], count: number): GridCell[] {
+  const maxRemovable = body.length - 1
+  return body.slice(Math.min(count, maxRemovable))
+}
+
+// Activation-side counterpart to applySnakeTurnIntent — the single choke point a held powerup's
+// effect goes through, for a human's tap or the CPU's own decision (see snakeAi.ts's
+// applyCpuSnakePowerupActivation). Clears the activating snake's single-slot inventory in every
+// branch. Same-axis effects replace rather than stack (see types/index.ts's SnakePlayerEffects).
+// Sidewind/Scales are self-targeted and work fine solo; Coldblood/Constrict/Mesmerize/Frenzy target
+// the opponent and no-op (still clearing the held slot) if there isn't one — defensive only, since
+// createInitialSnakeState's own solo-mode filtering already keeps these four out of solo's spawn
+// pool entirely.
+export function applySnakePowerupActivation(state: SnakeGameState, snakeId: SnakeId): SnakeGameState {
+  if (state.phase !== 'playing') return state
+  const snake = state.snakes.find((s) => s.id === snakeId)
+  if (!snake || !snake.alive || !snake.heldPowerup) return state
+
+  const opponent = state.snakes.find((s) => s.id !== snakeId) ?? null
+  const type = snake.heldPowerup
+  const tick = state.tick
+
+  const withCleared = (s: SnakeEntity): SnakeEntity => ({ ...s, heldPowerup: null })
+
+  if (type === 'sidewind') {
+    const speed: SnakeSpeedEffect = { type: 'sidewind', multiplier: 2, expiresAtTick: tick + SNAKE_POWERUP_EFFECT_DURATION_TICKS.sidewind }
+    return { ...state, snakes: state.snakes.map((s) => (s.id === snakeId ? { ...withCleared(s), effects: { ...s.effects, speed } } : s)) }
+  }
+
+  if (type === 'scales') {
+    const shield: SnakeShieldEffect = { expiresAtTick: tick + SNAKE_POWERUP_EFFECT_DURATION_TICKS.scales }
+    return { ...state, snakes: state.snakes.map((s) => (s.id === snakeId ? { ...withCleared(s), effects: { ...s.effects, shield } } : s)) }
+  }
+
+  if (!opponent) return { ...state, snakes: state.snakes.map((s) => (s.id === snakeId ? withCleared(s) : s)) }
+
+  if (type === 'constrict') {
+    // Proportional to the opponent's own current length (not a fixed cell count) so it stays a
+    // meaningful punish no matter how long the round has run — and deliberately leaves
+    // opponent.peakLength untouched, since that's a high-water mark, not the live length (see
+    // types/index.ts's own SnakeEntity.peakLength comment).
+    const trimmed = trimSnakeBodyFront(opponent.body, Math.floor(opponent.body.length * SNAKE_POWERUP_CONSTRICT_FRACTION))
+    return {
+      ...state,
+      snakes: state.snakes.map((s) => {
+        if (s.id === snakeId) return withCleared(s)
+        if (s.id === opponent.id) return { ...s, body: trimmed }
+        return s
+      })
+    }
+  }
+
+  if (type === 'coldblood') {
+    const speed: SnakeSpeedEffect = { type: 'coldblood', multiplier: 0, expiresAtTick: tick + SNAKE_POWERUP_EFFECT_DURATION_TICKS.coldblood }
+    return { ...state, snakes: state.snakes.map((s) => (s.id === snakeId ? withCleared(s) : s.id === opponent.id ? { ...s, effects: { ...s.effects, speed } } : s)) }
+  }
+
+  if (type === 'mesmerize') {
+    const control: SnakeControlEffect = { type: 'mesmerize', expiresAtTick: tick + SNAKE_POWERUP_EFFECT_DURATION_TICKS.mesmerize }
+    return { ...state, snakes: state.snakes.map((s) => (s.id === snakeId ? withCleared(s) : s.id === opponent.id ? { ...s, effects: { ...s.effects, control } } : s)) }
+  }
+
+  // type === 'frenzy'
+  const speed: SnakeSpeedEffect = { type: 'frenzy', multiplier: 2, expiresAtTick: tick + SNAKE_POWERUP_EFFECT_DURATION_TICKS.frenzy }
+  return { ...state, snakes: state.snakes.map((s) => (s.id === snakeId ? withCleared(s) : s.id === opponent.id ? { ...s, effects: { ...s.effects, speed } } : s)) }
+}
+
+// Advances the round exactly one tick, in 1-2 sub-steps per snake depending on any active speed
+// effect (Sidewind/Frenzy cover 2 cells this call; Coldblood covers 0) — mirrors LightCycles'
+// tickGame's own sub-step loop. Each snake still resolves exactly one queued direction for the
+// whole tick; a boosted snake just covers 2 cells in it, not two independent turns. When no snake
+// has an active effect, maxSteps is always 1 and this reduces to exactly the same single-pass
+// resolution this function used before powerups existed.
+//
+// Resolution per sub-step: compute the raw next cell → wrap-edges redirect (if still off-grid) →
+// portal redirect (unconditional, before any check below ever sees the raw destination) → wall/
+// out-of-bounds check on the FINAL cell → food-landing check → build the `vacating` set (current
+// tails of snakes stepping-and-surviving-and-not-growing this sub-step) → head-to-head among
+// snakes actually stepping this sub-step → body/obstacle collision against every not-already-dead
+// snake's CURRENT body minus `vacating`, with a tunnel-member destination exempted from this check
+// entirely (see types/index.ts's own SnakeTunnel comment for why no per-snake exclusion layer is
+// needed here, unlike LightCycles' equivalent). If anyone dies this sub-step, their crashCell is
+// recorded and the loop stops WITHOUT committing anyone's move for this sub-step — a still-alive
+// snake's own partial movement on the sub-step where someone else died is dropped too, which is
+// invisible since the round is already over the instant anyone dies. Otherwise, each stepping
+// snake's move commits (grow-and-keep-tail if it landed on food, slide otherwise), then pickup
+// collection is checked at the exact landed cell, snake-index order, so at most one snake can
+// claim a given pickup in one sub-step.
 export function tickSnake(state: SnakeGameState, random: () => number = Math.random): SnakeGameState {
   if (state.phase !== 'playing') return state
 
-  const { grid, wrapEdges, snakes, food } = state
+  const { grid, wrapEdges, snakes, obstacles, enabledPowerups } = state
   const tick = state.tick + 1
   const count = snakes.length
 
+  const portalLookup = buildPortalLookup(state.portals)
+  const tunnelCellSet = buildTunnelCellSet(state.tunnels)
+  const obstacleSet = new Set(obstacles.map(cellKey))
+  const arenaCellSet = new Set<string>([...tunnelCellSet, ...portalLookup.keys()])
+
   const aliveBefore = snakes.map((s) => s.alive)
-
-  // Steps 2-3.
   const direction = snakes.map((s) => s.pendingDirection ?? s.direction)
-  const rawNext = snakes.map((s, i) => stepCell(s.body[s.body.length - 1], direction[i]))
-  const outOfBounds = rawNext.map((cell) => !isInBounds(cell, grid))
-  const wallDeath = outOfBounds.map((oob, i) => aliveBefore[i] && oob && !wrapEdges)
-  const nextCell = rawNext.map((cell, i) => (aliveBefore[i] && outOfBounds[i] && wrapEdges ? wrapCell(cell, grid) : cell))
+  const steps = snakes.map((s) => stepsForSnake(s.effects))
+  const maxSteps = steps.reduce((max, s) => Math.max(max, s), 0)
 
-  // Step 4.
-  const growing = snakes.map((_, i) => aliveBefore[i] && !wallDeath[i] && nextCell[i].x === food.x && nextCell[i].y === food.y)
+  // Mutable per-tick locals, seeded from pre-tick values, accumulated across sub-steps.
+  const dead = aliveBefore.map((alive) => !alive)
+  const crashCell: (GridCell | null)[] = snakes.map((s) => s.crashCell)
+  const heldPowerup = snakes.map((s) => s.heldPowerup)
+  const bodies = snakes.map((s) => s.body)
+  let pickups = state.pickups
+  let food = state.food
 
-  // Step 5.
-  const vacating = new Set<string>()
-  snakes.forEach((s, i) => {
-    if (aliveBefore[i] && !wallDeath[i] && !growing[i]) vacating.add(cellKey(s.body[0]))
-  })
+  substep: for (let step = 1; step <= maxSteps; step++) {
+    const stepping = snakes.map((_, i) => !dead[i] && step <= steps[i])
 
-  const dead = wallDeath.map((w, i) => w || !aliveBefore[i])
+    const nextCell: (GridCell | null)[] = bodies.map((body, i) => {
+      if (!stepping[i]) return null
+      let cell = stepCell(body[body.length - 1], direction[i])
+      if (wrapEdges && !isInBounds(cell, grid)) cell = wrapCell(cell, grid)
+      return portalLookup.get(cellKey(cell)) ?? cell
+    })
 
-  // Step 6.
-  for (let i = 0; i < count; i++) {
-    if (dead[i] || !aliveBefore[i]) continue
-    for (let j = i + 1; j < count; j++) {
-      if (dead[j] || !aliveBefore[j]) continue
-      if (nextCell[i].x === nextCell[j].x && nextCell[i].y === nextCell[j].y) {
-        dead[i] = true
-        dead[j] = true
+    const outOfBounds = nextCell.map((cell, i) => stepping[i] && !isInBounds(cell!, grid))
+    const wallDeath = outOfBounds.map((oob, i) => stepping[i] && oob)
+    const growing = nextCell.map((cell, i) => stepping[i] && !wallDeath[i] && cell!.x === food.x && cell!.y === food.y)
+
+    const vacating = new Set<string>()
+    for (let i = 0; i < count; i++) {
+      if (stepping[i] && !wallDeath[i] && !growing[i]) vacating.add(cellKey(bodies[i][0]))
+    }
+
+    const stepDead = wallDeath.slice()
+    for (let i = 0; i < count; i++) {
+      if (stepDead[i] || !stepping[i]) continue
+      for (let j = i + 1; j < count; j++) {
+        if (stepDead[j] || !stepping[j]) continue
+        if (nextCell[i]!.x === nextCell[j]!.x && nextCell[i]!.y === nextCell[j]!.y) {
+          stepDead[i] = true
+          stepDead[j] = true
+        }
+      }
+    }
+
+    const bodyUnion = new Set<string>()
+    for (let i = 0; i < count; i++) {
+      if (!dead[i]) for (const cell of bodies[i]) bodyUnion.add(cellKey(cell))
+    }
+    for (let i = 0; i < count; i++) {
+      if (stepDead[i] || !stepping[i]) continue
+      const key = cellKey(nextCell[i]!)
+      if (tunnelCellSet.has(key)) continue
+      if (obstacleSet.has(key) || (bodyUnion.has(key) && !vacating.has(key))) stepDead[i] = true
+    }
+
+    if (stepDead.some((d, i) => d && !dead[i])) {
+      // A dying snake's move on THIS sub-step never commits (crashCell alone records where it
+      // would have landed — see SnakeEntity.crashCell's own comment: the body array stays exactly
+      // as of its last successful sub-step, the original single-step engine's own convention,
+      // generalized unchanged). A snake that DIDN'T die on this sub-step, though, still commits its
+      // own move here even though the tick as a whole is about to end — dying is per-snake, not a
+      // global "nothing else happened this tick" flag, and the original single-pass engine (and
+      // every test written against it) already relied on a survivor's own successful move landing
+      // on the same tick a rival crashes (e.g. one snake eating food the exact tick the other steps
+      // into its body). Only stepping snakes are touched; a 0-step (frozen) snake was never in the
+      // running to begin with.
+      for (let i = 0; i < count; i++) {
+        if (!stepping[i]) continue
+        if (stepDead[i] && !dead[i]) {
+          dead[i] = true
+          crashCell[i] = nextCell[i]
+          continue
+        }
+        if (dead[i]) continue
+        bodies[i] = growing[i] ? [...bodies[i], nextCell[i]!] : [...bodies[i].slice(1), nextCell[i]!]
+        if (enabledPowerups.length > 0 && pickups.length > 0) {
+          const landed = nextCell[i]!
+          const found = pickups.find((pu) => pu.cell.x === landed.x && pu.cell.y === landed.y)
+          if (found) {
+            heldPowerup[i] = found.type
+            pickups = pickups.filter((pu) => pu.id !== found.id)
+          }
+        }
+      }
+      break substep
+    }
+
+    for (let i = 0; i < count; i++) {
+      if (!stepping[i]) continue
+      bodies[i] = growing[i] ? [...bodies[i], nextCell[i]!] : [...bodies[i].slice(1), nextCell[i]!]
+    }
+
+    if (enabledPowerups.length > 0 && pickups.length > 0) {
+      for (let i = 0; i < count; i++) {
+        if (!stepping[i]) continue
+        const landed = nextCell[i]!
+        const found = pickups.find((pu) => pu.cell.x === landed.x && pu.cell.y === landed.y)
+        if (found) {
+          heldPowerup[i] = found.type
+          pickups = pickups.filter((pu) => pu.id !== found.id)
+        }
       }
     }
   }
 
-  // Step 7.
-  const bodyUnion = new Set<string>()
-  snakes.forEach((s, i) => {
-    if (aliveBefore[i]) for (const cell of s.body) bodyUnion.add(cellKey(cell))
-  })
-  for (let i = 0; i < count; i++) {
-    if (dead[i] || !aliveBefore[i]) continue
-    const key = cellKey(nextCell[i])
-    if (bodyUnion.has(key) && !vacating.has(key)) dead[i] = true
-  }
-
   const diedThisTick = dead.map((d, i) => d && aliveBefore[i])
 
-  // Steps 8-9. A snake that wasn't alive coming into this tick is passed through untouched; one
-  // that died this tick keeps its body as of its last surviving position, records where it died,
-  // and stops moving/turning.
-  let ateFood = false
-  const nextSnakes = snakes.map((s, i) => {
+  // A snake's `body` only ever grows (+1, food) or stays flat (slide) within this function —
+  // Constrict is the only thing that can shrink it, and that happens in a separate call before
+  // tickSnake ever runs (see useSnakeState.ts's own per-tick ordering) — so any length increase
+  // here is exactly this tick's own food-eating, whether or not the snake went on to crash later
+  // in the same tick.
+  const nextSnakes: SnakeEntity[] = snakes.map((s, i) => {
     if (!aliveBefore[i]) return s
-    if (dead[i]) return { ...s, alive: false, pendingDirection: null, direction: direction[i], crashCell: nextCell[i] }
-    if (growing[i]) {
-      ateFood = true
-      return { ...s, body: [...s.body, nextCell[i]], direction: direction[i], pendingDirection: null, score: s.score + 1 }
+    const scoreGain = Math.max(0, bodies[i].length - s.body.length)
+    return {
+      ...s,
+      body: bodies[i],
+      alive: !dead[i],
+      direction: steps[i] > 0 ? direction[i] : s.direction,
+      pendingDirection: steps[i] > 0 ? null : s.pendingDirection,
+      score: s.score + scoreGain,
+      heldPowerup: heldPowerup[i],
+      effects: expireEffects(s.effects, tick),
+      crashCell: diedThisTick[i] ? crashCell[i] : s.crashCell,
+      peakLength: Math.max(s.peakLength, bodies[i].length)
     }
-    return { ...s, body: [...s.body.slice(1), nextCell[i]], direction: direction[i], pendingDirection: null }
   })
 
-  // Step 10.
-  const nextFood = ateFood ? (pickRandomEmptyCell(grid, buildSnakeOccupiedSet(nextSnakes), random) ?? food) : food
+  const ateFood = bodies.some((body, i) => body.length > snakes[i].body.length)
+  if (ateFood) {
+    const occupied = occupiedFromBodies(bodies, obstacles)
+    const exclude = new Set(arenaCellSet)
+    if (pickups.length > 0) exclude.add(cellKey(pickups[0].cell))
+    food = pickRandomEmptyCell(grid, occupied, random, exclude) ?? food
+  }
 
-  // Step 11.
+  // Exactly one pickup on the board at a time, like the one apple — the instant it's collected (or
+  // none has spawned yet this round) a replacement appears immediately, next tick.
+  if (enabledPowerups.length > 0 && pickups.length === 0) {
+    const occupied = occupiedFromBodies(bodies, obstacles)
+    const exclude = new Set(arenaCellSet)
+    exclude.add(cellKey(food))
+    const cell = pickRandomEmptyCell(grid, occupied, random, exclude)
+    if (cell) {
+      const type = enabledPowerups[Math.floor(random() * enabledPowerups.length)]
+      pickups = [...pickups, { id: pickupId(tick, cell), type, cell }]
+    }
+  }
+
   let phase: SnakeGameState['phase'] = state.phase
   let outcome: RoundOutcome | null = state.outcome
 
@@ -211,5 +452,5 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
     phase = 'roundOver'
   }
 
-  return { ...state, phase, outcome, tick, snakes: nextSnakes, food: nextFood }
+  return { ...state, phase, outcome, tick, snakes: nextSnakes, food, pickups }
 }

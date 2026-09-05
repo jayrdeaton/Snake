@@ -23,7 +23,7 @@ describe('store', () => {
       const { theme } = store.getState()
       expect(theme.appearance).toBe('system')
       expect(theme.blur).toBe(true)
-      expect(theme.color).toBe('#6750a4')
+      expect(theme.color).toEqual({ primary: '#2E7D32', secondary: '#FBC02D', tertiary: expect.any(String) })
       expect(theme.harmony).toBe('split-complementary')
     })
 

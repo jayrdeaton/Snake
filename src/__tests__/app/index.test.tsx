@@ -1,4 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
+import { ToastProvider } from '@rific/toaster'
 import { fireEvent, render } from '@testing-library/react-native'
 import { router } from 'expo-router'
 import { Provider as ReduxProvider } from 'react-redux'
@@ -6,10 +7,12 @@ import { Provider as ReduxProvider } from 'react-redux'
 import Index from '../../app/index'
 import gameReducer, { defaultGameState, type GameSliceState } from '../../redux/gameSlice'
 
-// index.tsx is now the real home screen (title, per-mode high scores, mode buttons, CPU
-// difficulty picker, settings gear) rather than Expo-Starter's original `(tabs)` redirect stub,
-// so this only mocks expo-router's `router.push` (the one piece of the module the screen
-// actually calls) instead of the old `Redirect` shim.
+// index.tsx is the real home screen (animated hero title, 1 Player/2 Player buttons, settings
+// gear). HeroTitle's own letter/loop animation is Skia/Reanimated-heavy and has no testable
+// behavior relevant to index.tsx's own logic, so it's mocked to a trivial stand-in here — same
+// narrow, test-file-local override convention as _not-found.test.tsx's own expo-router mock.
+jest.mock('@/components/HeroTitle', () => ({ HeroTitle: () => null }))
+
 jest.mock('expo-router', () => ({
   router: { push: jest.fn() }
 }))
@@ -22,7 +25,16 @@ const makeStore = (gameState: GameSliceState = defaultGameState) =>
     preloadedState: { game: gameState }
   })
 
-const renderIndex = (gameState?: GameSliceState) => render(<ReduxProvider store={makeStore(gameState)}>{<Index />}</ReduxProvider>)
+// Wrapped in ToastProvider (not the full Providers stack - see that component's own doc) because
+// index.tsx always renders SettingsDialog (just toggling its internal Dialog's own `visible`, not
+// unmounting it), and SettingsDialog now calls useToast() for the Check for Updates row's
+// onUpdateError - which throws without a ToastProvider ancestor, settings panel open or not.
+const renderIndex = (gameState?: GameSliceState) =>
+  render(
+    <ReduxProvider store={makeStore(gameState)}>
+      <ToastProvider>{<Index />}</ToastProvider>
+    </ReduxProvider>
+  )
 
 beforeEach(() => {
   mockRouterPush.mockClear()
@@ -33,38 +45,24 @@ describe('app/index', () => {
     await expect(renderIndex()).resolves.toBeDefined()
   })
 
-  it('renders the per-mode high scores from Redux state', async () => {
-    const { getByText } = await renderIndex({ ...defaultGameState, highScore: { solo: 12, vsCpu: 7, twoPlayer: 3 } })
-    expect(getByText('12')).toBeTruthy()
-    expect(getByText('7')).toBeTruthy()
-    expect(getByText('3')).toBeTruthy()
+  it('renders exactly the 1 Player / 2 Player buttons, with no stats', async () => {
+    const { getByText, queryByText } = await renderIndex({ ...defaultGameState, highScore: { solo: 12, vsCpu: 7, twoPlayer: 3 } })
+    expect(getByText('1 Player')).toBeTruthy()
+    expect(getByText('2 Player')).toBeTruthy()
+    // No per-mode high-score stats anymore — that's moving to a future achievements screen.
+    expect(queryByText('12')).toBeNull()
+    expect(queryByText('Vs CPU')).toBeNull()
   })
 
-  it('navigates to /game with mode "solo" when Solo is pressed', async () => {
-    const { getAllByText } = await renderIndex()
-    fireEvent.press(getAllByText('Solo')[1])
-    expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/game', params: { mode: 'solo' } })
+  it('navigates to /loadout with mode "onePlayer" when 1 Player is pressed', async () => {
+    const { getByText } = await renderIndex()
+    fireEvent.press(getByText('1 Player'))
+    expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/loadout', params: { mode: 'onePlayer' } })
   })
 
   it('navigates to /loadout with mode "twoPlayer" when 2 Player is pressed', async () => {
-    const { getAllByText } = await renderIndex()
-    fireEvent.press(getAllByText('2 Player')[1])
+    const { getByText } = await renderIndex()
+    fireEvent.press(getByText('2 Player'))
     expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/loadout', params: { mode: 'twoPlayer' } })
-  })
-
-  it('opens the CPU difficulty picker on Vs CPU without navigating yet', async () => {
-    const { getAllByText, getByText } = await renderIndex()
-    await fireEvent.press(getAllByText('Vs CPU')[1])
-    expect(mockRouterPush).not.toHaveBeenCalled()
-    expect(getByText('Easy')).toBeTruthy()
-    expect(getByText('Normal')).toBeTruthy()
-    expect(getByText('Hard')).toBeTruthy()
-  })
-
-  it('dispatches the chosen CPU difficulty and navigates to /loadout with mode "vsCpu"', async () => {
-    const { getAllByText, getByText } = await renderIndex()
-    await fireEvent.press(getAllByText('Vs CPU')[1])
-    await fireEvent.press(getByText('Hard'))
-    expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/loadout', params: { mode: 'vsCpu' } })
   })
 })
