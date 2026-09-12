@@ -1,5 +1,5 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
-import { getFixedZoneRotation, getOpposingZoneRotation, useAccelerometerOrientation } from '@tastic/split-screen'
+import { getFixedZoneRotation, getOpposingZoneRotation, useOrientationState } from '@tastic/core'
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
@@ -41,7 +41,7 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
   const { fonts } = useAutoPaperTheme()
   const opacity = useSharedValue(1)
   const [stageIndex, setStageIndex] = useState(0)
-  const { orientationMode, p1OnRight, upsideDown } = useAccelerometerOrientation()
+  const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
 
   const { playCountdownTick, playCountdownGo } = useSnakeSounds()
   const soundRef = useRef({ playCountdownTick, playCountdownGo })
@@ -101,9 +101,8 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
   if (!colors.snake2) return null
 
   // Mirrors TouchInputLayer.tsx's own zone split exactly (face-to-face: near/bottom = snake 1,
-  // far/top = snake 2; side-by-side: whichever seat useAccelerometerOrientation says is on the
-  // right gets the right zone), so the countdown zones never disagree with where a swipe actually
-  // registers.
+  // far/top = snake 2; side-by-side: whichever seat useOrientationState says is on the right gets
+  // the right zone), so the countdown zones never disagree with where a swipe actually registers.
   const isFaceToFace = orientationMode === 'faceToFace'
   const snake1Zone = isFaceToFace ? styles.zoneBottom : p1OnRight ? styles.zoneRight : styles.zoneLeft
   const snake2Zone = isFaceToFace ? styles.zoneTop : p1OnRight ? styles.zoneLeft : styles.zoneRight

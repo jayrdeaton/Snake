@@ -1,6 +1,7 @@
 import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
+import { getViewRotation, rotateInsets, useOrientationState } from '@tastic/core'
 import { CornerActionButtons, LabeledDropdownOption, MenuOption, PressAwayOverlay, ReadyButton, SharedActionBand, usePopoverHost } from '@tastic/hud'
-import { DualZoneLayout, FakeLandscapeView, getViewRotation, needsSharedNeutralZone, rotateInsets, useAccelerometerOrientation, useDualZoneLayout } from '@tastic/split-screen'
+import { DualZoneLayout, FakeLandscapeView, needsSharedNeutralZone, useDualZoneLayout } from '@tastic/split-screen'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
@@ -16,7 +17,7 @@ import { useProfiles } from '@/hooks/useProfiles'
 import { SnakeMode } from '@/hooks/useSnakeState'
 import { defaultGameState, gameActions } from '@/redux/gameSlice'
 import type { RootState } from '@/redux/store'
-import { ControlScheme, SnakeArenaVariant, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
+import { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
 
 // Same 180ms panel-swap fade every other @tastic loadout screen uses (see BoxHockey's/AirHockey's
 // own constant of the same name/value).
@@ -68,6 +69,17 @@ const ARENA_OPTIONS: MenuOption<SnakeArenaVariant>[] = [
   { value: 'underpass', label: 'Underpass', icon: 'tunnel-outline' }
 ]
 
+// Per-round cell size — mirrors LightCycles' own grid-size picker (see constants/snake.ts's
+// SNAKE_CELL_PX). Plain Small/Medium/Large labels rather than a themed relabel (unlike LightCycles'
+// own motorbike/car/train icons, or this screen's own Garter/Rattler/King Cobra difficulty labels
+// above) — a growing-dot icon progression already reads as "size" at a glance, so there's no need
+// to invent a snake-specific metaphor just for this one setting.
+const GRID_SIZE_OPTIONS: MenuOption<SnakeGridSizeTier>[] = [
+  { value: 'small', label: 'Small', icon: 'circle-small' },
+  { value: 'medium', label: 'Medium', icon: 'circle-medium' },
+  { value: 'large', label: 'Large', icon: 'circle' }
+]
+
 // Per-round tick speed — mirrors LightCycles' own speed picker (see constants/snake.ts's
 // SNAKE_SPEED_TIER_INTERVAL_MS).
 const SPEED_OPTIONS: MenuOption<SnakeSpeedTier>[] = [
@@ -86,17 +98,18 @@ const POWERUP_OPTIONS: MenuOption<SnakePowerupType>[] = SNAKE_POWERUP_ALL_TYPES.
 // fullScreen, Snake's only two board options). CPU difficulty and (web-only) control scheme each
 // live in this screen's own per-seat pickers below
 // per-seat pickers below (PlayerSetupPanel), not the shared row — same cross-app convention
-// BoxHockey's/AirHockey's/LightCycles' own per-seat pickers use. Reuses
-// @tastic/split-screen's FakeLandscapeView/useAccelerometerOrientation (Snake's own version of that
-// package, like BoxHockey's, fakes the rotation in JS since app.json is portrait-locked at the OS
-// level — unlike AirHockey's older split-screen version, which still relies on real OS rotation).
+// BoxHockey's/AirHockey's/LightCycles' own per-seat pickers use. Reuses @tastic/split-screen's
+// FakeLandscapeView (@tastic/core's own useOrientationState feeds it) — Snake's own version of
+// that package, like BoxHockey's, fakes the rotation in JS since app.json is portrait-locked at
+// the OS level — unlike AirHockey's older split-screen version, which still relies on real OS
+// rotation).
 export default function LoadoutScreen() {
   const params = useLocalSearchParams<{ mode: string }>()
   const routeMode = params.mode === 'twoPlayer' ? 'twoPlayer' : 'onePlayer'
   const p2IsHuman = routeMode === 'twoPlayer'
 
   const lockOrientation = useSelector((state: RootState) => state.game.lockOrientation)
-  const { orientationMode, p1OnRight, upsideDown, resolved: p1OnRightResolved } = useAccelerometerOrientation(lockOrientation)
+  const { orientationMode, p1OnRight, upsideDown, resolved: p1OnRightResolved } = useOrientationState(lockOrientation)
   const { panelLayout, panelFadeStyle } = useDualZoneLayout(orientationMode, p1OnRight, p1OnRightResolved, upsideDown, PANEL_SWAP_FADE_MS)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -116,6 +129,7 @@ export default function LoadoutScreen() {
   // comment for what it actually does.
   const fullScreen = useSelector((state: RootState) => state.game.fullScreen)
   const arenaVariant = useSelector((state: RootState) => state.game.arenaVariant)
+  const gridSizeTier = useSelector((state: RootState) => state.game.gridSizeTier)
   const speedTier = useSelector((state: RootState) => state.game.speedTier)
   const enabledPowerups = useSelector((state: RootState) => state.game.enabledPowerups)
   // Web-only per-seat picker (see PlayerSetupPanel's showControlScheme) — Record<SnakeId,...>
@@ -258,9 +272,9 @@ export default function LoadoutScreen() {
   )
 
   // Covers every genuine gameplay variant LoadoutSharedControls exposes — wrapEdges (a coin flip,
-  // same as before), arenaVariant (a random pick off the same option list the picker itself
-  // offers), speedTier (same), and enabledPowerups (an independent coin flip per type, matching
-  // wrapEdges' own single-line style rather than picking from a curated subset). Per-seat stuff
+  // same as before), arenaVariant/gridSizeTier (a random pick off the same option list each picker
+  // itself offers), speedTier (same), and enabledPowerups (an independent coin flip per type,
+  // matching wrapEdges' own single-line style rather than picking from a curated subset). Per-seat stuff
   // (colors, difficulty) and app-wide prefs (lock orientation) live outside this row and aren't
   // "match settings" in the sense a player means when they ask to shuffle or reset the current
   // round. fullScreen is the one exception left inside the row itself: still a toggle in the same
@@ -271,6 +285,7 @@ export default function LoadoutScreen() {
   const handleRandomizeMatchSettings = useCallback(() => {
     dispatch(gameActions.setWrapEdges(Math.random() < 0.5))
     dispatch(gameActions.setArenaVariant(ARENA_OPTIONS[Math.floor(Math.random() * ARENA_OPTIONS.length)].value))
+    dispatch(gameActions.setGridSizeTier(GRID_SIZE_OPTIONS[Math.floor(Math.random() * GRID_SIZE_OPTIONS.length)].value))
     dispatch(gameActions.setSpeedTier(SPEED_OPTIONS[Math.floor(Math.random() * SPEED_OPTIONS.length)].value))
     dispatch(gameActions.setEnabledPowerups(SNAKE_POWERUP_ALL_TYPES.filter(() => Math.random() < 0.5)))
   }, [dispatch])
@@ -278,6 +293,7 @@ export default function LoadoutScreen() {
   const handleResetMatchSettings = useCallback(() => {
     dispatch(gameActions.setWrapEdges(defaultGameState.wrapEdges))
     dispatch(gameActions.setArenaVariant(defaultGameState.arenaVariant))
+    dispatch(gameActions.setGridSizeTier(defaultGameState.gridSizeTier))
     dispatch(gameActions.setSpeedTier(defaultGameState.speedTier))
     dispatch(gameActions.setEnabledPowerups(defaultGameState.enabledPowerups))
   }, [dispatch])
@@ -350,6 +366,9 @@ export default function LoadoutScreen() {
       fullScreen={fullScreen}
       fullScreenOption={FULL_SCREEN_OPTION}
       onFullScreenChange={(value) => dispatch(gameActions.setFullScreen(value))}
+      gridSizeTier={gridSizeTier}
+      gridSizeOptions={GRID_SIZE_OPTIONS}
+      onGridSizeChange={(value) => dispatch(gameActions.setGridSizeTier(value))}
       speedTier={speedTier}
       speedOptions={SPEED_OPTIONS}
       onSpeedChange={(value) => dispatch(gameActions.setSpeedTier(value))}
@@ -455,7 +474,7 @@ export default function LoadoutScreen() {
         )}
       </FakeLandscapeView>
 
-      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} />
+      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={rotation} />
     </View>
   )
 }

@@ -1,5 +1,6 @@
+import { isOppositeDirection } from '@tastic/grid'
+
 import { GridCell, SnakeEntity, SnakeGameState, SnakeRoundSettings } from '@/types'
-import { isOppositeDirection } from '@/utils/grid'
 import { applySnakePowerupActivation, applySnakeTurnIntent, buildSnakeOccupiedSet, createInitialSnakeState, SNAKE_START_LENGTH, tickSnake } from '@/utils/snakeEngine'
 
 // Fills in the fields every fixture needs regardless of what it's actually testing, so each call

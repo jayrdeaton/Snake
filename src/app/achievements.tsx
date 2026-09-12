@@ -1,7 +1,9 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { ACHIEVEMENT_TIER_COLORS, unlockedKey } from '@tastic/achievements'
+import { rotateInsets, useRotation } from '@tastic/core'
 import { AchievementRow, BaseStatsScreen, LOCKED_BADGE_COLOR, MONO_FONT, StatRow, StatSection, usePopoverHost } from '@tastic/hud'
 import { ProfileChip, ProfilePicker } from '@tastic/profile'
+import { FakeLandscapeView } from '@tastic/split-screen'
 import { router } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
@@ -63,7 +65,12 @@ function ProfileRankingRow({ ranking, fg, fgMuted }: ProfileRankingRowProps) {
 }
 
 export default function AchievementsScreen() {
-  const insets = useSafeAreaInsets()
+  // Unlike index.tsx, this screen previously had no orientation handling at all — it always
+  // rendered right-side-up regardless of how the phone was actually being held. rotateInsets
+  // remaps the device's own raw (never-rotated) safe-area reading onto whichever edge it actually
+  // corresponds to once FakeLandscapeView below visually rotates the content.
+  const rotation = useRotation()
+  const insets = rotateInsets(useSafeAreaInsets(), rotation)
   const { dark } = useAutoPaperTheme()
   const fgMuted = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'
   const { stats, unlockedAchievements, resetAll, loaded } = useGameStats()
@@ -100,63 +107,65 @@ export default function AchievementsScreen() {
   if (!loaded) return null
 
   return (
-    <BaseStatsScreen onBack={() => router.back()} insets={insets} onReset={handleReset} resetConfirmBody='This permanently erases every high score, stat and achievement. This cannot be undone.'>
-      {profiles.length > 0 && <ProfilePicker idPrefix='achievements' host={profilePickerHost} profiles={profiles} selectedId={effectiveProfileId} color={themeColors.primary} dark={dark} guestLabel='All Profiles' nullLabel='All Profiles' nullIcon='account-group' onSelect={(profile) => setSelectedProfileId(profile?.id ?? null)} />}
+    <FakeLandscapeView style={styles.rotatable}>
+      <BaseStatsScreen onBack={() => router.back()} insets={insets} onReset={handleReset} resetConfirmBody='This permanently erases every high score, stat and achievement. This cannot be undone.' rotation={rotation}>
+        {profiles.length > 0 && <ProfilePicker idPrefix='achievements' host={profilePickerHost} profiles={profiles} selectedId={effectiveProfileId} color={themeColors.primary} dark={dark} guestLabel='All Profiles' nullLabel='All Profiles' nullIcon='account-group' onSelect={(profile) => setSelectedProfileId(profile?.id ?? null)} />}
 
-      <StatSection label='OVERALL'>
-        <StatRow label='Rounds Played' value={String(getTotalPlayed(statsView))} />
-        <StatRow label='Best Score' value={String(getBestScoreAnyMode(statsView))} />
-        <StatRow label='Total Score' value={String(getTotalScore(statsView))} />
-        <StatRow label='Longest Snake' value={String(statsView.longestSnake)} />
-      </StatSection>
+        <StatSection label='OVERALL'>
+          <StatRow label='Rounds Played' value={String(getTotalPlayed(statsView))} />
+          <StatRow label='Best Score' value={String(getBestScoreAnyMode(statsView))} />
+          <StatRow label='Total Score' value={String(getTotalScore(statsView))} />
+          <StatRow label='Longest Snake' value={String(statsView.longestSnake)} />
+        </StatSection>
 
-      <StatSection label='VERSUS'>
-        <StatRow label='Record (W-L-D)' value={`${statsView.versus.wins}-${statsView.versus.losses}-${statsView.versus.draws}`} />
-        <StatRow label='Current Streak' value={String(statsView.versusStreak.currentWinStreak)} />
-        <StatRow label='Best Streak' value={String(statsView.versusStreak.bestWinStreak)} />
-      </StatSection>
+        <StatSection label='VERSUS'>
+          <StatRow label='Record (W-L-D)' value={`${statsView.versus.wins}-${statsView.versus.losses}-${statsView.versus.draws}`} />
+          <StatRow label='Current Streak' value={String(statsView.versusStreak.currentWinStreak)} />
+          <StatRow label='Best Streak' value={String(statsView.versusStreak.bestWinStreak)} />
+        </StatSection>
 
-      {/* High score comes from the redux-persist store, which predates this screen and still feeds
+        {/* High score comes from the redux-persist store, which predates this screen and still feeds
       the in-round banner; everything else on this row is from the stats blob. */}
-      {SNAKE_MODES.map((mode) => (
-        <StatSection key={mode} label={MODE_LABELS[mode].toUpperCase()}>
-          <StatRow label='High Score' value={String(highScore[mode])} />
-          <StatRow label='Rounds' value={String(statsView.byMode[mode].played)} />
-          <StatRow label='Total Score' value={String(statsView.byMode[mode].totalScore)} />
-        </StatSection>
-      ))}
+        {SNAKE_MODES.map((mode) => (
+          <StatSection key={mode} label={MODE_LABELS[mode].toUpperCase()}>
+            <StatRow label='High Score' value={String(highScore[mode])} />
+            <StatRow label='Rounds' value={String(statsView.byMode[mode].played)} />
+            <StatRow label='Total Score' value={String(statsView.byMode[mode].totalScore)} />
+          </StatSection>
+        ))}
 
-      {/* A leaderboard across profiles is inherently a cross-profile question, so it only appears
+        {/* A leaderboard across profiles is inherently a cross-profile question, so it only appears
       on "All Profiles" — once you've drilled into one profile it answers a different question. */}
-      {effectiveProfileId === null && rankings.length > 0 && (
-        <StatSection label='PLAYER RANKINGS'>
-          {rankings.map((ranking) => (
-            <ProfileRankingRow key={ranking.profile.id} ranking={ranking} fg={fg} fgMuted={fgMuted} />
-          ))}
+        {effectiveProfileId === null && rankings.length > 0 && (
+          <StatSection label='PLAYER RANKINGS'>
+            {rankings.map((ranking) => (
+              <ProfileRankingRow key={ranking.profile.id} ranking={ranking} fg={fg} fgMuted={fgMuted} />
+            ))}
+          </StatSection>
+        )}
+
+        <StatSection label='ACTIVITY'>
+          <StatRow label='Days Played' value={String(statsView.distinctDaysPlayed)} />
+          <StatRow label='Day Streak' value={String(statsView.currentDayStreak)} />
+          <StatRow label='Best Day Streak' value={String(statsView.bestDayStreak)} />
         </StatSection>
-      )}
 
-      <StatSection label='ACTIVITY'>
-        <StatRow label='Days Played' value={String(statsView.distinctDaysPlayed)} />
-        <StatRow label='Day Streak' value={String(statsView.currentDayStreak)} />
-        <StatRow label='Best Day Streak' value={String(statsView.bestDayStreak)} />
-      </StatSection>
-
-      <Text variant='labelMedium' style={[styles.listLabel, { color: fgMuted, fontFamily: MONO_FONT }]}>
-        ALL ACHIEVEMENTS
-      </Text>
-      {ACHIEVEMENT_CATALOG.map((achievement) => {
-        // scope:'device' always evaluates against the real device stats and its bare-id key,
-        // regardless of which tab is active; everything else follows the selected view. On
-        // "All Profiles" both branches collapse to the same thing.
-        const scope = achievement.scope ?? 'profile'
-        const evalStats = scope === 'device' ? stats : statsView
-        const unlockedAt = unlockedAchievements[unlockedKey(achievement.id, scope === 'device' ? null : effectiveProfileId)]
-        const progress = unlockedAt === undefined ? achievement.progress?.(evalStats) : undefined
-        const tierColor = ACHIEVEMENT_TIER_COLORS[achievement.tier]
-        return <AchievementRow key={achievement.id} icon={achievement.icon} title={achievement.title} description={achievement.description} badgeColor={unlockedAt !== undefined ? tierColor : LOCKED_BADGE_COLOR} checkColor={tierColor} unlockedLabel={unlockedAt !== undefined ? unlockedLabel(unlockedAt) : undefined} progress={progress} deviceMarker={effectiveProfileId !== null && scope === 'device'} />
-      })}
-    </BaseStatsScreen>
+        <Text variant='labelMedium' style={[styles.listLabel, { color: fgMuted, fontFamily: MONO_FONT }]}>
+          ALL ACHIEVEMENTS
+        </Text>
+        {ACHIEVEMENT_CATALOG.map((achievement) => {
+          // scope:'device' always evaluates against the real device stats and its bare-id key,
+          // regardless of which tab is active; everything else follows the selected view. On
+          // "All Profiles" both branches collapse to the same thing.
+          const scope = achievement.scope ?? 'profile'
+          const evalStats = scope === 'device' ? stats : statsView
+          const unlockedAt = unlockedAchievements[unlockedKey(achievement.id, scope === 'device' ? null : effectiveProfileId)]
+          const progress = unlockedAt === undefined ? achievement.progress?.(evalStats) : undefined
+          const tierColor = ACHIEVEMENT_TIER_COLORS[achievement.tier]
+          return <AchievementRow key={achievement.id} icon={achievement.icon} title={achievement.title} description={achievement.description} badgeColor={unlockedAt !== undefined ? tierColor : LOCKED_BADGE_COLOR} checkColor={tierColor} unlockedLabel={unlockedAt !== undefined ? unlockedLabel(unlockedAt) : undefined} progress={progress} deviceMarker={effectiveProfileId !== null && scope === 'device'} />
+        })}
+      </BaseStatsScreen>
+    </FakeLandscapeView>
   )
 }
 
@@ -172,6 +181,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8
+  },
+  rotatable: {
+    flex: 1
   },
   statRow: {
     alignItems: 'center',

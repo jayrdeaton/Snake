@@ -1,11 +1,12 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { IconButton, useVibration } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
-import { computeContentBounds } from '@tastic/core'
-import { getFixedZoneRotation, needsSharedNeutralZone, useAccelerometerOrientation } from '@tastic/split-screen'
+import { computeContentBounds, getFixedZoneRotation, useOrientationState, useSettledWindowDimensions } from '@tastic/core'
+import { computeGridSize } from '@tastic/grid'
+import { needsSharedNeutralZone } from '@tastic/split-screen'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, useWindowDimensions, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useDispatch, useSelector } from 'react-redux'
 
@@ -25,7 +26,6 @@ import { SnakeMode, useSnakeState } from '@/hooks/useSnakeState'
 import { gameActions } from '@/redux/gameSlice'
 import type { RootState } from '@/redux/store'
 import { Direction, GamePhase, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
-import { computeGridSize } from '@/utils/grid'
 
 export default function GameScreen() {
   const params = useLocalSearchParams<{ mode?: string | string[]; p1Color?: string | string[]; p2Color?: string | string[] }>()
@@ -40,18 +40,28 @@ export default function GameScreen() {
   const rawP2Color = Array.isArray(params.p2Color) ? params.p2Color[0] : params.p2Color
   const colors = useMemo(() => (rawP1Color || rawP2Color ? { 1: rawP1Color, 2: rawP2Color } : undefined), [rawP1Color, rawP2Color])
 
-  const { width, height } = useWindowDimensions()
+  const { width, height } = useSettledWindowDimensions()
   const fullScreen = useSelector((state: RootState) => state.game.fullScreen)
+  // Resolved once here (not inside the computeGridSize useMemo below) since designWidth/
+  // designHeight and the cellPx prop passed to SnakeBoard both need the same resolved pixel size
+  // too — see constants/snake.ts's own SNAKE_CELL_PX comment for what each tier actually means.
+  const gridSizeTier = useSelector((state: RootState) => state.game.gridSizeTier)
+  const cellPx = SNAKE_CELL_PX[gridSizeTier]
+  const insets = useSafeAreaInsets()
   const { gutterWidth } = computeContentBounds(width, MAX_BOARD_CONTENT_WIDTH)
-  // The AVAILABLE width computeGridSize sizes the grid from — not just a visual crop applied after
-  // the fact, so a wide desktop-web window genuinely gets a narrower board (fewer columns) instead
-  // of a merely letterboxed view of a wider one. Mirrors LightCycles' own Full Screen setting, which
-  // also governs the actual grid a round plays on, not just its on-screen presentation. Ignored
-  // entirely once fullScreen is on, same as LightCycles' extendIntoSafeArea bypassing its own
-  // gutter. Live (not frozen) — see boardScale's own comment below for how a live availableWidth and
-  // a frozen state.grid stay reconciled across a resize instead of fighting each other.
-  const availableWidth = fullScreen ? width : width - 2 * gutterWidth
-  const grid = useMemo(() => computeGridSize(availableWidth, height, SNAKE_CELL_PX), [availableWidth, height])
+  // The AVAILABLE width/height computeGridSize sizes the grid from — not just a visual crop applied
+  // after the fact, so a wide desktop-web window genuinely gets a narrower board (fewer columns) and
+  // a device's notch/status bar/home indicator genuinely gets a shorter one (fewer rows), instead of
+  // a merely letterboxed view of a bigger one. Mirrors LightCycles' own Full Screen/extendIntoSafeArea
+  // setting, which also governs the actual grid a round plays on, not just its on-screen presentation:
+  // width loses both the desktop-web gutter and the left/right safe-area insets, height loses the
+  // top/bottom safe-area insets. Both ignored entirely once fullScreen is on, same as LightCycles'
+  // extendIntoSafeArea bypassing its own gutter+insets. Live (not frozen) — see boardScale's own
+  // comment below for how a live availableWidth/availableHeight and a frozen state.grid stay
+  // reconciled across a resize instead of fighting each other.
+  const availableWidth = fullScreen ? width : width - insets.left - insets.right - 2 * gutterWidth
+  const availableHeight = fullScreen ? height : height - insets.top - insets.bottom
+  const grid = useMemo(() => computeGridSize(availableWidth, availableHeight, cellPx), [availableWidth, availableHeight, cellPx])
 
   const wrapEdges = useSelector((state: RootState) => state.game.wrapEdges)
   const speedTier = useSelector((state: RootState) => state.game.speedTier)
@@ -260,6 +270,16 @@ export default function GameScreen() {
   // fade takes longer, rather than revealing the dialog over a still-fading loser.
   const [showGameOverDialog, setShowGameOverDialog] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Matches GameActionChips' own rotation below exactly (same useOrientationState()/
+  // getFixedZoneRotation call, no lock argument) — SettingsDialog renders via a react-native-paper
+  // Portal (nothing else transforms it), so without this the far seat in a rotating 2-player match
+  // would see it upright relative to the device's fixed physical frame instead of to themselves,
+  // unlike GameActionChips' own back/settings chips right next to it. A second, independent
+  // subscription rather than a shared one: GameActionChips computes this internally from its own
+  // useOrientationState() call and doesn't receive it as a prop, so there's no existing value in
+  // this parent scope to reuse instead.
+  const { orientationMode: settingsOrientationMode, p1OnRight: settingsP1OnRight, upsideDown: settingsUpsideDown } = useOrientationState()
+  const settingsRotation = getFixedZoneRotation(settingsOrientationMode, settingsP1OnRight, settingsUpsideDown)
 
   useEffect(() => {
     if (state.phase !== 'roundOver') return undefined
@@ -290,23 +310,33 @@ export default function GameScreen() {
   // GameRound uses, and safe for the identical reason: TouchInputLayer's own zones are
   // percentage-of-parent/pan-translation based, not absolute-pixel — scales the board+touch subtree
   // below as one rigid unit to fit the live window, so it now visibly tracks a resize without state
-  // (or state.grid's own cols/rows) ever needing to change. Compared against availableWidth, not the
-  // raw window width, on purpose: availableWidth is already gutter-capped when fullScreen is off
-  // (see its own comment above), and designWidth was itself computed from whatever availableWidth
-  // was at round start — comparing against the SAME live, equally-capped quantity is what keeps a
-  // live resize honoring that cap instead of scaling straight back up to the raw window and erasing
-  // it. Comparing against raw `width` here would do exactly that: undo the gutter the instant the
-  // window resized even slightly, since scale-to-fit doesn't know a gutter was ever applied.
-  const designWidth = state.grid.cols * SNAKE_CELL_PX
-  const designHeight = state.grid.rows * SNAKE_CELL_PX
-  const boardScale = Math.min(availableWidth / designWidth, height / designHeight)
+  // (or state.grid's own cols/rows) ever needing to change. Compared against availableWidth/
+  // availableHeight, not the raw window width/height, on purpose: both are already gutter/inset-
+  // capped when fullScreen is off (see their own comment above), and designWidth/designHeight were
+  // themselves computed from whatever availableWidth/availableHeight were at round start — comparing
+  // against the SAME live, equally-capped quantities is what keeps a live resize honoring that cap
+  // instead of scaling straight back up to the raw window and erasing it. Comparing against raw
+  // `width`/`height` here would do exactly that: undo the gutter/inset the instant the window
+  // resized (or a rotation changed the insets) even slightly, since scale-to-fit doesn't know a
+  // gutter or inset was ever applied.
+  const designWidth = state.grid.cols * cellPx
+  const designHeight = state.grid.rows * cellPx
+  const boardScale = Math.min(availableWidth / designWidth, availableHeight / designHeight)
 
   return (
     <View style={[styles.root, { backgroundColor: bg }]}>
-      <View style={{ width: designWidth, height: designHeight, transform: [{ scale: boardScale }] }}>
-        <SnakeBoard snakes={state.snakes} food={state.food} obstacles={state.obstacles} portals={state.portals} tunnels={state.tunnels} pickups={state.pickups} phase={state.phase} cellPx={SNAKE_CELL_PX} grid={state.grid} tick={state.tick} tickIntervalMs={tickIntervalMs} wrapEdges={wrapEdges} onboarding={phase === 'onboarding'} />
-        <TouchInputLayer mode={touchMode} enabled={phase === 'playing'} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} />
-        {enabledPowerups.length > 0 && <SnakePowerupHud snakes={state.snakes} />}
+      {/* Explicit top/bottom/left/right edges from insets (not a flex-centered shrink within a
+      full-bleed parent) so an asymmetric inset — a landscape notch/Dynamic Island sitting on just
+      one side, for instance — still produces a genuinely safe rectangle instead of one that's
+      merely the right SIZE but mis-centered relative to it. fullScreen swaps in boardAreaFullBleed,
+      bleeding the board all the way to the physical screen edge instead. Mirrors LightCycles'
+      identical boardArea/boardAreaFullBleed split. */}
+      <View style={[styles.boardArea, fullScreen ? styles.boardAreaFullBleed : { top: insets.top, bottom: insets.bottom, left: insets.left + gutterWidth, right: insets.right + gutterWidth }]}>
+        <View style={{ width: designWidth, height: designHeight, transform: [{ scale: boardScale }] }}>
+          <SnakeBoard snakes={state.snakes} food={state.food} obstacles={state.obstacles} portals={state.portals} tunnels={state.tunnels} pickups={state.pickups} phase={state.phase} cellPx={cellPx} grid={state.grid} tick={state.tick} tickIntervalMs={tickIntervalMs} wrapEdges={wrapEdges} onboarding={phase === 'onboarding'} />
+          <TouchInputLayer mode={touchMode} enabled={phase === 'playing'} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} />
+          {enabledPowerups.length > 0 && <SnakePowerupHud snakes={state.snakes} />}
+        </View>
       </View>
       <KeyboardInputLayer enabled={phase === 'playing'} humanPlayers={humanPlayers} controlScheme={controlScheme} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} />
 
@@ -318,7 +348,7 @@ export default function GameScreen() {
       identically-motivated MatchOverlays split — this live tilt subscription's re-renders should
       never cascade into the board/touch-input subtree. */}
       <GameActionChips showBack={phase === 'onboarding'} showSettings={phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)} onBack={() => router.back()} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} />
-      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} />
+      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={settingsRotation} />
     </View>
   )
 }
@@ -351,7 +381,7 @@ interface GameActionChipsProps {
 // Each chip also rotates in place via the same getFixedZoneRotation signal LightCycles'/BoxHockey's
 // own chip buttons use, so it stays legible however the phone is physically being held.
 function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlayerCount }: GameActionChipsProps) {
-  const { orientationMode, p1OnRight, upsideDown } = useAccelerometerOrientation()
+  const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
   const insets = useSafeAreaInsets()
   const { dark } = useAutoPaperTheme()
   const fg = dark ? '#FFFFFF' : '#000000'
@@ -382,6 +412,9 @@ function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlay
 }
 
 const styles = StyleSheet.create({
+  // See the boardArea View's own comment at its call site for what these two are switching between.
+  boardArea: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'absolute' },
+  boardAreaFullBleed: { bottom: 0, left: 0, right: 0, top: 0 },
   chipButton: { margin: 0 },
   // Side-by-side: full screen width at a fixed top/bottom edge, button centered horizontally via
   // alignItems — lands exactly on the vertical 50/50 zone split (see OnboardingOverlay's own

@@ -2,7 +2,7 @@ import { IconButton } from '@rific/feedback-press'
 import { MenuOption, PopoverHost, SectionedDropdown, usePopoverHost } from '@tastic/hud'
 import { StyleSheet, View } from 'react-native'
 
-import { SnakeArenaVariant, SnakePowerupType, SnakeSpeedTier } from '@/types'
+import { SnakeArenaVariant, SnakeGridSizeTier, SnakePowerupType, SnakeSpeedTier } from '@/types'
 
 interface Props {
   // Shared popover host — see PlayerSetupPanel's identical `host` prop. loadout.tsx always passes
@@ -34,6 +34,12 @@ interface Props {
   fullScreen: boolean
   fullScreenOption: MenuOption<'fullScreen'>
   onFullScreenChange: (value: boolean) => void
+  // Per-round cell size (see constants/snake.ts's SNAKE_CELL_PX) — its own trigger, matching
+  // LightCycles' identical 'gridSize' SectionedDropdown, rather than folding into the 'board'
+  // dropdown above: arena/wrapEdges/fullScreen are about board SHAPE, this is about board SCALE.
+  gridSizeTier: SnakeGridSizeTier
+  gridSizeOptions: MenuOption<SnakeGridSizeTier>[]
+  onGridSizeChange: (value: SnakeGridSizeTier) => void
   // Per-round tick speed (see constants/snake.ts's SNAKE_SPEED_TIER_INTERVAL_MS) — its own trigger,
   // matching LightCycles' identical 'speed' SectionedDropdown.
   speedTier: SnakeSpeedTier
@@ -68,9 +74,9 @@ interface Props {
 // own former "BOARD" section (see that file's own comment) to match BoxHockey's/AirHockey's/
 // LightCycles' identical cross-app convention of keeping per-round board options in loadout, not
 // settings.
-export const LOADOUT_SHARED_CONTROLS_IDS = ['board', 'speed', 'powerups']
+export const LOADOUT_SHARED_CONTROLS_IDS = ['board', 'gridSize', 'speed', 'powerups']
 
-export function LoadoutSharedControls({ host: sharedHost, arenaVariant, arenaOptions, onArenaChange, wrapEdges, wrapEdgesOption, onWrapEdgesChange, fullScreen, fullScreenOption, onFullScreenChange, speedTier, speedOptions, onSpeedChange, enabledPowerups, powerupOptions, onPowerupsChange, onRandomize, onReset, accentColor, mutedColor, onAccentColor, dark }: Props) {
+export function LoadoutSharedControls({ host: sharedHost, arenaVariant, arenaOptions, onArenaChange, wrapEdges, wrapEdgesOption, onWrapEdgesChange, fullScreen, fullScreenOption, onFullScreenChange, gridSizeTier, gridSizeOptions, onGridSizeChange, speedTier, speedOptions, onSpeedChange, enabledPowerups, powerupOptions, onPowerupsChange, onRandomize, onReset, accentColor, mutedColor, onAccentColor, dark }: Props) {
   const ownHost = usePopoverHost()
   const host = sharedHost ?? ownHost
   // See PlayerSetupPanel's identical ownPopoverOpen comment — elevating this row for *any* open
@@ -121,6 +127,8 @@ export function LoadoutSharedControls({ host: sharedHost, arenaVariant, arenaOpt
           onAccentColor={onAccentColor}
           dark={dark}
         />
+
+        <SectionedDropdown id='gridSize' host={host} icon='grid' accessibilityLabel='Grid size' sections={[{ kind: 'single', id: 'gridSize', options: gridSizeOptions, value: gridSizeTier, onChange: onGridSizeChange }]} accentColor={accentColor} mutedColor={mutedColor} onAccentColor={onAccentColor} dark={dark} />
 
         <SectionedDropdown id='speed' host={host} icon='speedometer' accessibilityLabel='Speed' sections={[{ kind: 'single', id: 'speed', options: speedOptions, value: speedTier, onChange: onSpeedChange }]} accentColor={accentColor} mutedColor={mutedColor} onAccentColor={onAccentColor} dark={dark} />
 

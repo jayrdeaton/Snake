@@ -1,4 +1,15 @@
-import { SNAKE_DEATH_FADE_MAX_MS, SNAKE_DEATH_FADE_MIN_MS, SNAKE_DEATH_FADE_MS_PER_CELL, snakeDeathFadeMs } from '@/constants/snake'
+import { SNAKE_CELL_PX, SNAKE_DEATH_FADE_MAX_MS, SNAKE_DEATH_FADE_MIN_MS, SNAKE_DEATH_FADE_MS_PER_CELL, snakeDeathFadeMs } from '@/constants/snake'
+
+describe('SNAKE_CELL_PX', () => {
+  it('keeps medium at the original fixed 18px so existing players see no default change', () => {
+    expect(SNAKE_CELL_PX.medium).toBe(18)
+  })
+
+  it('makes small strictly thinner and large strictly chunkier than medium', () => {
+    expect(SNAKE_CELL_PX.small).toBeLessThan(SNAKE_CELL_PX.medium)
+    expect(SNAKE_CELL_PX.large).toBeGreaterThan(SNAKE_CELL_PX.medium)
+  })
+})
 
 describe('snakeDeathFadeMs', () => {
   it('clamps a short body to the minimum', () => {

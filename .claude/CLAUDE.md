@@ -54,6 +54,8 @@ Note: `expo-router` and `expo-sensors` are real dependencies of this app but hav
 
 `@infinitetoken/eslint-config` (`^0.2.0`), `@infinitetoken/jest-config` (`^0.2.3`), and `@infinitetoken/tsconfig` (`^0.4.1`) are all on real published versions — never yalc-linked for this app.
 
+**`@rific/scroll-view` was briefly yalc-linked (`file:.yalc/@rific/scroll-view`) — resolved 2026-09-11, and it was a proactive, dependency-only patch, never a fix for anything broken in this app's own screens.** The bug (`ScrollViewProvider`'s `headerHeight` state could get stuck at `null` forever on web if a `<ScrollViewHeader>`'s `onLayout` never fires on first mount, leaving a whole screen stuck at `opacity: 0` — confirmed live in Hangman, see that app's own CLAUDE.md and `React-Native-Scroll-View`'s CLAUDE.md, "The web opacity-0 race `ScrollViewProvider` guards against") never actually affected this app: its own source only imports `ScrollViewSettingsProvider`/`scrollViewActions`/`scrollViewReducer` (`Providers.tsx`, `redux/store.ts`) — never `ScrollViewProvider` or `ScrollViewHeader` themselves, confirmed by grep. Now on the real published `@rific/scroll-view@0.7.1` (a patch — pure bug fix, no API change) via a normal semver range; the `.yalc/` link is gone.
+
 ## Testing
 
 - Framework: Jest (`@infinitetoken/jest-config/expo`, `jest-expo` preset)

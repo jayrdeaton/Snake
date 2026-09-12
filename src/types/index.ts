@@ -1,8 +1,11 @@
 import { AchievementDefinition as BaseAchievementDefinition, DayStreakState, OutcomeRecord, RoundResult, WinStreakState } from '@tastic/achievements'
+import type { GridCell, GridSize } from '@tastic/grid'
 import { KeyScheme } from '@tastic/input'
 
 import { SnakeMode } from '@/hooks/useSnakeState'
 import { CpuDifficulty } from '@/utils/snakeAi'
+
+export type { GridCell, GridSize }
 
 // Fresh types for Snake's own engine — deliberately NOT shared with LightCycles. LightCycles'
 // types are shaped around exactly-two-players-always (Record<Player, PlayerState>) and a trail
@@ -16,6 +19,13 @@ export type Direction = 'up' | 'down' | 'left' | 'right'
 // SNAKE_SPEED_TIER_INTERVAL_MS). No speed-ramp equivalent: LightCycles itself keeps that toggle
 // hidden in its own UI, so there's nothing live there worth porting.
 export type SnakeSpeedTier = 'slow' | 'normal' | 'fast'
+
+// Per-round cell pixel size — mirrors LightCycles' GridSizeTier. A tier picks a fixed cellPx (see
+// constants/snake.ts's SNAKE_CELL_PX); computeGridSize then derives however many cols/rows actually
+// fit the live screen from it, so this is never a fixed cell COUNT. Unlike LightCycles, tick
+// interval is NOT rescaled per tier (see SNAKE_CELL_PX's own comment) — a 'small' round ticks at
+// exactly the same cadence as 'large', it just moves fewer px per tick.
+export type SnakeGridSizeTier = 'small' | 'medium' | 'large'
 
 // Selectable static board layout for the round — mirrors LightCycles' ArenaVariant. 'open' is the
 // original empty rectangle and stays the default everywhere a caller doesn't specify otherwise
@@ -39,16 +49,6 @@ export type SnakePowerupType = 'sidewind' | 'coldblood' | 'scales' | 'constrict'
 // as one mutually exclusive set, since Snake's two human seats can contend over the one physical
 // mouse a desktop has, same as they contend over keyboard keys.
 export type ControlScheme = KeyScheme | 'mouse'
-
-export interface GridCell {
-  x: number
-  y: number
-}
-
-export interface GridSize {
-  cols: number
-  rows: number
-}
 
 // 1 = near/bottom spawn, 2 = far/top spawn — meaningful only when two snakes share the board (Vs
 // CPU, 2 Player). A solo round is simply the one entry in a length-1 SnakeGameState.snakes.

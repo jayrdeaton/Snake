@@ -3,12 +3,12 @@
 // held-item-related since Snake had no powerups; now that it does, this file grows the same
 // lookahead/powerup-awareness/mesmerize-compensation shape LightCycles' own cpuAi.ts already has.
 
+import { ALL_DIRECTIONS, cellKey, isInBounds, isOppositeDirection, stepCell, wrapCell } from '@tastic/grid'
 import { applyControlInversion } from '@tastic/input'
 
 import { Direction, GridCell, GridSize, SnakeEntity, SnakeGameState, SnakeId, SnakePowerupPickup, SnakePowerupType } from '@/types'
 
 import { countReachableCells, distanceToNearestTarget } from './floodFill'
-import { ALL_DIRECTIONS, cellKey, isInBounds, isOppositeDirection, stepCell, wrapCell } from './grid'
 import { applySnakePowerupActivation, applySnakeTurnIntent, buildPortalLookup, buildSnakeOccupiedSet, buildTunnelCellSet, stepsForSnake } from './snakeEngine'
 
 export type CpuDifficulty = 'easy' | 'normal' | 'hard'

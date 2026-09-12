@@ -1,8 +1,8 @@
 // Renders the shared, unrotated board for every mode (Solo / Vs CPU / 2 Player) — see the plan's
 // "Rendering (SnakeBoard.tsx)" section. ONE Canvas, drawn once, containing every alive snake in the
 // same coordinate space (never duplicated/rotated per player — that idea was superseded; only small
-// HUD/dialog decoration rotates per seat, via @tastic/split-screen elsewhere, never the board
-// itself, matching how LightCycles' own face-to-face arena already works).
+// HUD/dialog decoration rotates per seat, via @tastic/core elsewhere, never the board itself,
+// matching how LightCycles' own face-to-face arena already works).
 //
 // Each snake's body renders as a smooth, undulating centerline (steps 1-5 below) rather than rigid
 // grid blocks, with a thin theme-tertiary centerline accent traced down its back (step 6), a
@@ -17,7 +17,8 @@
 // GameOverDialog until the slowest dying snake's fade finishes.
 import { getColorRoles, useAutoPaperTheme } from '@rific/auto-paper'
 import { Canvas, Circle, Path, Rect, Skia, type SkPath } from '@shopify/react-native-skia'
-import { type OrientationMode, useAccelerometerOrientation } from '@tastic/split-screen'
+import { type OrientationMode, useOrientationState } from '@tastic/core'
+import { cellToPixel } from '@tastic/grid'
 import { ObstacleRect } from '@tastic/sprites/shapes'
 import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { StyleSheet } from 'react-native'
@@ -25,7 +26,6 @@ import { Easing, type SharedValue, useDerivedValue, useFrameCallback, useSharedV
 
 import { SNAKE_DEATH_FADE_BAND_CELLS, SNAKE_POWERUP_EFFECT_COLORS, SNAKE_POWERUP_PICKUP_RADIUS_RATIO, snakeDeathFadeMs } from '@/constants/snake'
 import { Direction, GridCell, GridSize, SnakeEntity, SnakeGameState, SnakeId, SnakePortal, SnakePowerupPickup, SnakeTunnel } from '@/types'
-import { cellToPixel } from '@/utils/grid'
 
 export interface SnakeBoardProps {
   snakes: SnakeEntity[]
@@ -519,8 +519,8 @@ const TONGUE_BACK_MS = 170
 // tied to score/apples eaten instead of the snake's current length. Scales every head-relative
 // dimension uniformly (see SnakeBody's own headScale) rather than the body, which already reads
 // small on a short snake purely from its own taper.
-const HEAD_START_SCALE = 0.65
-const HEAD_GROWTH_APPLES = 2
+const HEAD_START_SCALE = 0.5
+const HEAD_GROWTH_APPLES = 6
 const HEAD_GROWTH_ANIM_MS = 260
 
 function headScaleForScore(score: number): number {
@@ -998,7 +998,7 @@ function wallPath(grid: GridSize, cellPx: number, orientationMode: OrientationMo
   }
 
   // Side-by-side: whichever snake is currently on the right gets the right zone — see
-  // useAccelerometerOrientation for which physical rotation direction puts snake 1 there, and
+  // useOrientationState for which physical rotation direction puts snake 1 there, and
   // TouchInputLayer.tsx's identical split.
   const onRight = snakeId === 1 ? p1OnRight : !p1OnRight
   const midX = width / 2
@@ -1040,7 +1040,7 @@ function Walls({ snakes, grid, cellPx, wrapEdges, onboarding }: { snakes: SnakeE
   // this subtree live on every tilt sample via TouchInputLayer's own identical subscription (see
   // that file's own header comment), so reading it here again doesn't introduce any new re-render
   // cost this board wasn't already paying.
-  const { orientationMode, p1OnRight } = useAccelerometerOrientation()
+  const { orientationMode, p1OnRight } = useOrientationState()
   if (wrapEdges || onboarding) return null
 
   const snake1 = snakes.find((s) => s.id === 1)

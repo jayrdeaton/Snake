@@ -1,4 +1,4 @@
-import { useAccelerometerOrientation } from '@tastic/split-screen'
+import { useOrientationState } from '@tastic/core'
 import { StyleSheet, View } from 'react-native'
 import { Icon } from 'react-native-paper'
 
@@ -30,7 +30,7 @@ function HeldItemBadge({ heldPowerup }: { heldPowerup: SnakeEntity['heldPowerup'
 // the full width): snake 1 stays bottom, snake 2 stays top, regardless of p1OnRight. Solo mode
 // (snakes.length === 1) simply has no snake 2 to render a second badge for.
 export function SnakePowerupHud({ snakes }: SnakePowerupHudProps) {
-  const { orientationMode, p1OnRight } = useAccelerometerOrientation()
+  const { orientationMode, p1OnRight } = useOrientationState()
   const snake1 = snakes.find((s) => s.id === 1)
   const snake2 = snakes.find((s) => s.id === 2)
   const isFaceToFace = orientationMode === 'faceToFace'

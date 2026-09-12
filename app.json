@@ -13,7 +13,8 @@
     ],
     "updates": {
       "fallbackToCacheTimeout": 0,
-      "checkAutomatically": "ON_LOAD"
+      "checkAutomatically": "ON_LOAD",
+      "url": "https://u.expo.dev/32bc84c9-573d-4735-a1a4-70fb22d3c1a9"
     },
     "runtimeVersion": {
       "policy": "fingerprint"
@@ -39,6 +40,7 @@
       },
       "entitlements": {
         "com.apple.security.application-groups": [
+          "group.com.infinitetoken.tastic",
           "group.com.infinitetoken.tastic"
         ]
       }
@@ -77,7 +79,10 @@
       "@tastic/edge-guard"
     ],
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "32bc84c9-573d-4735-a1a4-70fb22d3c1a9"
+      }
     }
   }
 }

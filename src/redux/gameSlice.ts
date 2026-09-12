@@ -1,7 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import { REHYDRATE } from 'redux-persist'
 
-import type { ControlScheme, SnakeArenaVariant, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
+import type { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
 import { SNAKE_COLORS } from '@/utils/snakeEngine'
 
 export type CpuDifficulty = 'easy' | 'normal' | 'hard'
@@ -14,15 +14,14 @@ export type GameSliceState = {
   }
   wrapEdges: boolean
   // Caps the board's own width via @tastic/core's computeContentBounds (see game.tsx and
-  // constants/snake.ts's MAX_BOARD_CONTENT_WIDTH) on a wide desktop-web window — mirrors
-  // LightCycles' "Full Screen" toggle in spirit and in UI label, but narrower in scope: nothing
-  // here reads useSafeAreaInsets for the board itself (Snake never has, board or otherwise), so
-  // this only ever governs the gutter, never a safe-area inset the way LightCycles' analogous field
-  // also does. false (the default) caps at MAX_BOARD_CONTENT_WIDTH with centered gutters on either
-  // side; true uses the full raw window width, same as every build of this app before this field
-  // existed. Deliberately excluded from loadout.tsx's "Randomize" shuffle even though its own
-  // toggle lives in the same LoadoutSharedControls row as wrapEdges — see that handler's own
-  // comment for why.
+  // constants/snake.ts's MAX_BOARD_CONTENT_WIDTH) on a wide desktop-web window, AND keeps the board
+  // within the device's safe area (useSafeAreaInsets — notch/status bar, home indicator) — mirrors
+  // LightCycles' "Full Screen"/extendIntoSafeArea toggle in both spirit and scope. false (the
+  // default) caps at MAX_BOARD_CONTENT_WIDTH with centered gutters on either side AND insets the
+  // board within the safe area; true uses the full raw window, ignoring both, same as every build
+  // of this app before this field existed. Deliberately excluded from loadout.tsx's "Randomize"
+  // shuffle even though its own toggle lives in the same LoadoutSharedControls row as wrapEdges —
+  // see that handler's own comment for why.
   fullScreen: boolean
   // null means "no real difficulty has ever been picked yet" — the default computer player is no
   // computer player at all (Solo), not Normal. Distinct from loadout.tsx's own 'none' (a per-round
@@ -30,8 +29,8 @@ export type GameSliceState = {
   // a real Easy/Normal/Hard pick lands here via setCpuDifficulty, it stays non-null forever after,
   // same "remember my real preference" convention lastGuestColor/lastCpuColor use for player colors.
   cpuDifficulty: CpuDifficulty | null
-  // Mirrors LightCycles' GameSettings.lockOrientation (see useAccelerometerOrientation's own
-  // param), relevant again now that Vs CPU/2 Player use the real @tastic/split-screen accelerometer
+  // Mirrors LightCycles' GameSettings.lockOrientation (see useOrientationState's own
+  // param), relevant again now that Vs CPU/2 Player use the real @tastic/core accelerometer
   // orientation system. LightCycles persists its whole settings object to AsyncStorage separately
   // from Redux (see its gameSettingsValidation.ts) because it predates this app's Redux-first
   // settings setup; Snake already centralizes every other persisted preference (wrapEdges,
@@ -77,6 +76,10 @@ export type GameSliceState = {
   // list), so a single multi-select control covers both at once. Empty by default — powerups are
   // an opt-in variant, not a default-on behavior change for existing players.
   enabledPowerups: SnakePowerupType[]
+  // Per-round cell pixel size — mirrors LightCycles' GridSizeTier (see constants/snake.ts's
+  // SNAKE_CELL_PX). Lives here, not a separate settings object, same "one persisted-settings home"
+  // reasoning as speedTier/arenaVariant above.
+  gridSizeTier: SnakeGridSizeTier
 }
 
 export const defaultGameState: GameSliceState = {
@@ -91,7 +94,8 @@ export const defaultGameState: GameSliceState = {
   controlScheme: { 1: 'mouse', 2: 'wasd' },
   speedTier: 'normal',
   arenaVariant: 'open',
-  enabledPowerups: []
+  enabledPowerups: [],
+  gridSizeTier: 'medium'
 }
 
 const slice = createSlice({
@@ -122,11 +126,12 @@ const slice = createSlice({
     setSpeedTier: (state, action: PayloadAction<SnakeSpeedTier>) => ({ ...state, speedTier: action.payload }),
     setArenaVariant: (state, action: PayloadAction<SnakeArenaVariant>) => ({ ...state, arenaVariant: action.payload }),
     setEnabledPowerups: (state, action: PayloadAction<SnakePowerupType[]>) => ({ ...state, enabledPowerups: action.payload }),
+    setGridSizeTier: (state, action: PayloadAction<SnakeGridSizeTier>) => ({ ...state, gridSizeTier: action.payload }),
     // Scoped to just the high-score record — unlike resetGameState below, this doesn't touch
     // wrapEdges/fullScreen/cpuDifficulty/lockOrientation/deferBottomEdgeGestures/lastGuestColor/
-    // lastCpuColor/controlScheme/speedTier/arenaVariant/enabledPowerups, since achievements.tsx's
-    // own "Reset All Stats" action should only erase tracked stats, not silently revert every other
-    // persisted preference along with them.
+    // lastCpuColor/controlScheme/speedTier/arenaVariant/enabledPowerups/gridSizeTier, since
+    // achievements.tsx's own "Reset All Stats" action should only erase tracked stats, not silently
+    // revert every other persisted preference along with them.
     resetHighScore: (state) => ({ ...state, highScore: defaultGameState.highScore }),
     resetGameState: () => defaultGameState
   },
@@ -136,10 +141,10 @@ const slice = createSlice({
   // comment, which is what lets this extraReducer's own return value pre-empt that wholesale
   // replacement instead of being clobbered by it. Without this, anyone whose last persisted session
   // predates a field being added here (enabledPowerups, controlScheme, speedTier, arenaVariant,
-  // lockOrientation, deferBottomEdgeGestures all landed after this slice's very first shape) would
-  // rehydrate with that field genuinely `undefined` — not defaultGameState's own value — the first
-  // time this code runs against their existing AsyncStorage data, crashing anything that assumes the
-  // type it's declared as (e.g. loadout.tsx's `enabledPowerups.length`).
+  // lockOrientation, deferBottomEdgeGestures, gridSizeTier all landed after this slice's very first
+  // shape) would rehydrate with that field genuinely `undefined` — not defaultGameState's own value —
+  // the first time this code runs against their existing AsyncStorage data, crashing anything that
+  // assumes the type it's declared as (e.g. loadout.tsx's `enabledPowerups.length`).
   extraReducers: (builder) => {
     builder.addCase(REHYDRATE, (state, action: { type: typeof REHYDRATE; payload?: { game?: Partial<GameSliceState> } }) => ({ ...defaultGameState, ...state, ...action.payload?.game }))
   }

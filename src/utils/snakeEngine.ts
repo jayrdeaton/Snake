@@ -1,8 +1,10 @@
+import { cellKey, isInBounds, isOppositeDirection, stepCell, wrapCell } from '@tastic/grid'
+
 import { SNAKE_POWERUP_CONSTRICT_FRACTION, SNAKE_POWERUP_EFFECT_DURATION_TICKS } from '@/constants/snake'
 import { Direction, GridCell, GridSize, RoundOutcome, SnakeControlEffect, SnakeEntity, SnakeGameState, SnakeId, SnakePortal, SnakeRoundSettings, SnakeShieldEffect, SnakeSpeedEffect, SnakeTunnel } from '@/types'
 
 import { buildArenaObstacles, buildArenaPortals, buildArenaTunnels } from './arenas'
-import { cellKey, faceToFaceSpawnPoint, isInBounds, isOppositeDirection, soloSpawnPoint, stepCell, wrapCell } from './grid'
+import { faceToFaceSpawnPoint, soloSpawnPoint } from './grid'
 
 // Every snake starts as a straight 3-segment body — long enough to have a real tail distinct from
 // its head (so the tail-vacate rule below has something to demonstrate) without any board being

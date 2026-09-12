@@ -1,24 +1,35 @@
-import { SnakePowerupType, SnakeSpeedTier } from '@/types'
+import { SnakeGridSizeTier, SnakePowerupType, SnakeSpeedTier } from '@/types'
 
 // Per-tier tick interval, mirroring LightCycles' SPEED_TIER_INTERVAL_MS. Unlike LightCycles, there
-// is deliberately no speed-ramp table and no per-grid-size-tier scaling here (see
+// is deliberately no speed-ramp table and no per-grid-size-tier rescaling here (see
 // scaleMsForCellPx/SPEED_RAMP_* there for what that looks like) — LightCycles itself keeps its own
-// ramp toggle hidden in its UI, and Snake has no grid-size tiers to rescale against (SNAKE_CELL_PX
-// below is fixed). useSnakeState.ts's rAF loop just compares elapsed dt against whichever of these
-// three the round's persisted speedTier picked, every tick, for the life of a round. `normal`
-// preserves this app's original fixed 110ms exactly, so a player who never touches the new setting
-// sees no behavior change; `slow`/`fast` fan out from it using roughly LightCycles' own slow/normal
-// and fast/normal ratios.
+// ramp toggle hidden in its UI, and a gridSizeTier change here only ever affects SNAKE_CELL_PX
+// below, never tick cadence: a 'small' round ticks at exactly the same rate as 'large', it just
+// moves fewer px per tick. useSnakeState.ts's rAF loop just compares elapsed dt against whichever
+// of these three the round's persisted speedTier picked, every tick, for the life of a round.
+// `normal` preserves this app's original fixed 110ms exactly, so a player who never touches the new
+// setting sees no behavior change; `slow`/`fast` fan out from it using roughly LightCycles' own
+// slow/normal and fast/normal ratios.
 export const SNAKE_SPEED_TIER_INTERVAL_MS: Record<SnakeSpeedTier, number> = {
   slow: 150,
   normal: 110,
   fast: 80
 }
 
-// Classic Snake reads better at larger, chunkier cells than LightCycles' own board does (a
-// snake-body-width block is the genre's visual identity) — intentionally chunkier than LightCycles'
-// GRID_CELL_PX.medium (8px, see constants/game.ts there), not a rescaled/derived value.
-export const SNAKE_CELL_PX = 18
+// Per-tier cell pixel size, mirroring LightCycles' GRID_CELL_PX — 'medium' is Classic Snake's
+// original fixed cell size exactly (chunkier than LightCycles' own GRID_CELL_PX.medium of 8px, a
+// snake-body-width block being the genre's visual identity — see constants/game.ts there), so a
+// player who never touches the new gridSizeTier setting sees no default behavior change. 'small'/
+// 'large' fan out from it — more, thinner cells (more room to maneuver) vs. fewer, chunkier cells
+// (less room) — using a narrower spread than LightCycles' own small/large ratio: Snake needs more
+// slack to loop around its own growing body than a trail-avoidance game does, so LightCycles' full
+// ratio applied here would make 'large' too cramped to play comfortably on a phone-sized board.
+// First-pass numbers, verify visually.
+export const SNAKE_CELL_PX: Record<SnakeGridSizeTier, number> = {
+  small: 14,
+  medium: 18,
+  large: 24
+}
 
 // Caps the board's own width via @tastic/core's computeContentBounds (see game.tsx) whenever
 // fullScreen is off — mirrors LightCycles' identical MAX_BOARD_CONTENT_WIDTH (same 1000px cap; no

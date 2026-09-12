@@ -1,5 +1,5 @@
+import { useOrientationState } from '@tastic/core'
 import { applyControlInversion } from '@tastic/input'
-import { useAccelerometerOrientation } from '@tastic/split-screen'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -37,7 +37,7 @@ export interface TouchInputLayerProps {
 // it. The board underneath still stays one undivided render — only touch handling is zoned.
 export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, controlInverted }: TouchInputLayerProps) {
   const solo = mode === 'solo'
-  const { orientationMode, p1OnRight } = useAccelerometerOrientation()
+  const { orientationMode, p1OnRight } = useOrientationState()
 
   // Kept in a ref rather than closed over directly, so makeSnakeGesture (and the Gesture objects it
   // builds) can stay referentially stable across renders — same rationale as LightCycles'
@@ -134,7 +134,7 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
 
   // Face-to-face: top/bottom split (snake 1 = near/bottom zone, since snake 1 is assumed to be the
   // device's owner and the near zone faces them; snake 2 = far/top zone). Side-by-side: whichever
-  // seat is on the right (see useAccelerometerOrientation) gets the right zone. Used as-is for both
+  // seat is on the right (see useOrientationState) gets the right zone. Used as-is for both
   // Vs CPU (only the near/bottom zone is actually listened to by the caller — there's no second
   // human — though this component doesn't need to know that, it just always renders both zones) and
   // 2 Player (both zones are live).

@@ -1,6 +1,8 @@
+import { isInBounds } from '@tastic/grid'
+
 import { GridCell, GridSize, SnakeArenaVariant, SnakePortal, SnakeTunnel } from '@/types'
 
-import { faceToFaceSpawnPoint, isInBounds, soloSpawnPoint } from './grid'
+import { faceToFaceSpawnPoint, soloSpawnPoint } from './grid'
 
 // Ported from LightCycles' utils/arenas.ts, with its OrientationMode axis-abstraction dropped
 // entirely: Snake's grid model has no side-by-side layout (see grid.ts's own comment on
@@ -13,7 +15,7 @@ import { faceToFaceSpawnPoint, isInBounds, soloSpawnPoint } from './grid'
 // both heads are equal.
 //
 // Every tuning constant below is rescaled from LightCycles' own (tuned at its GRID_CELL_PX.medium =
-// 8px) by roughly SNAKE_CELL_PX/8 ≈ 2.25x fewer cells per axis for the same physical screen —
+// 8px) by roughly SNAKE_CELL_PX.medium/8 ≈ 2.25x fewer cells per axis for the same physical screen —
 // except PILLAR_BLOCK_RADIUS_CELLS (scaling to 0 would erase the "pillars read as bigger" effect the
 // constant exists for), PORTAL_MIN_COLS/ROWS (scaling down would let portals spawn on a genuinely
 // tiny grid), and GAUNTLET_GAP_WIDTH_MIN/MAX_CELLS (scaling down would make gaps too tight for a

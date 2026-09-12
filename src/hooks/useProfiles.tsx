@@ -47,7 +47,7 @@ function generateProfileId(): string {
 }
 
 // Single source of truth for saved player profiles, mounted once in _layout.tsx alongside
-// AccelerometerOrientationProvider — expo-router keeps prior screens mounted, so a per-screen
+// OrientationProvider — expo-router keeps prior screens mounted, so a per-screen
 // AsyncStorage-backed copy could go stale or clobber a concurrent update.
 //
 // Base identity fields (name/color/tag) are shared with every other @tastic game declaring the

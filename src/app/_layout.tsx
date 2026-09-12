@@ -1,6 +1,7 @@
 import { useUpdater } from '@rific/updater'
-import { AccelerometerOrientationProvider } from '@tastic/split-screen'
+import { OrientationProvider } from '@tastic/core'
 import { Stack } from 'expo-router'
+import { DeviceMotion } from 'expo-sensors'
 import * as SplashScreen from 'expo-splash-screen'
 
 import { Providers } from '@/components/Providers'
@@ -43,13 +44,18 @@ const RootLayout = () => {
       {/* Mounted once, here, above the navigator — not inside Providers.tsx itself. Providers.tsx
       is the generic, game-agnostic Expo-Starter provider stack (Redux/theme/feedback/scroll-view)
       that a future non-split-screen spinoff from the same starter would still want as-is;
-      AccelerometerOrientationProvider is specific to this app's face-to-face/side-by-side Vs
-      CPU and 2 Player modes, so it lives alongside the navigator it actually serves instead of
-      inside that shared abstraction. Matches LightCycles' own root _layout.tsx, which mounts it
-      the same way for the same reason: a single app-lifetime sensor subscription is what makes
-      the committed orientation survive screen navigation (index -> game and back), instead of
-      each screen's own hook instance restarting from a default guess on every mount. */}
-      <AccelerometerOrientationProvider>
+      OrientationProvider is specific to this app's face-to-face/side-by-side Vs CPU and 2 Player
+      modes, so it lives alongside the navigator it actually serves instead of inside that shared
+      abstraction. Matches LightCycles' own root _layout.tsx, which mounts it the same way for the
+      same reason: a single app-lifetime sensor subscription is what makes the committed
+      orientation survive screen navigation (index -> game and back), instead of each screen's own
+      hook instance restarting from a default guess on every mount. */}
+      {/* @tastic/core's own OrientationProvider never imports expo-sensors itself — a real
+      top-level import there would force every consumer of the package (even one with zero
+      interest in tilt tracking) to have expo-sensors installed, or Metro fails to resolve it.
+      This app genuinely wants live tilt tracking, so it does its own real import and hands the
+      resolved module in via this prop. */}
+      <OrientationProvider deviceMotion={DeviceMotion}>
         {/* GameStatsProvider wraps ProfilesProvider, not the other way around, so its own
         AsyncStorage-backed achievements/stats load starts immediately and independently — it has
         no lazy-initializer race of its own to guard against (see useGameStats.tsx), so it must
@@ -61,7 +67,7 @@ const RootLayout = () => {
             <RootNavigator />
           </ProfilesProvider>
         </GameStatsProvider>
-      </AccelerometerOrientationProvider>
+      </OrientationProvider>
     </Providers>
   )
 }

@@ -1,5 +1,6 @@
+import { isOppositeDirection } from '@tastic/grid'
+
 import { Direction, GridCell, SnakeEntity, SnakeGameState, SnakePowerupPickup } from '@/types'
-import { isOppositeDirection } from '@/utils/grid'
 import { applyCpuSnakePowerupActivation, applyCpuSnakeTurn, chooseCpuSnakeDirection, CpuDifficulty, shouldCpuActivateSnakePowerup } from '@/utils/snakeAi'
 import { buildSnakeOccupiedSet } from '@/utils/snakeEngine'
 
