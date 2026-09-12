@@ -1,4 +1,5 @@
 import { useToast } from '@rific/toaster'
+import type { ViewRotation } from '@tastic/core'
 import { BaseSettingsDialog } from '@tastic/hud'
 import { useDispatch, useSelector } from 'react-redux'
 
@@ -9,11 +10,11 @@ import { RootState } from '@/redux/store'
 export interface SettingsDialogProps {
   visible: boolean
   onDismiss: () => void
-  // Live physical-hold rotation (see @tastic/split-screen's getViewRotation) — this is a centered,
+  // Live physical-hold rotation (see @tastic/core's getViewRotation) — this is a centered,
   // app-wide modal with no per-player zone to match (unlike OnboardingOverlay/RoundOverDialog), so
   // it just rotates its own content in place; defaults to 0 for call sites that don't have a live
   // orientation signal handy (there's nothing else for it to stay consistent with).
-  rotation?: number
+  rotation?: ViewRotation
 }
 
 // Thin adapter over @tastic/hud's shared settings shell — Snake's own lock orientation/edge guard
