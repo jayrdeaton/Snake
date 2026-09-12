@@ -119,12 +119,36 @@ function pickupId(tick: number, cell: GridCell): string {
   return `pu-${tick}-${cell.x}-${cell.y}`
 }
 
+// The grid-cell margin along each edge that falls inside the device's own safe-area inset —
+// `insetsPx` is expected to already be zeroed out by the caller (see GameScreen's own fullScreen
+// branch) whenever the board ISN'T bleeding under it, since otherwise the board's pixel container
+// already stops short of the inset and every cell is already clear of it; this function itself
+// stays agnostic of that setting. Mirrors LightCycles' identical buildUnsafeAreaCells. Ceil'd up to
+// whole cells so food/a pickup can never spawn partially under the notch/Dynamic Island/
+// home-indicator/speaker cutout — better to lose a cell of margin than leave one still hidden.
+function buildUnsafeAreaCells(grid: GridSize, cellPx: number, insetsPx: { top: number; right: number; bottom: number; left: number }): GridCell[] {
+  const marginTop = Math.ceil(insetsPx.top / cellPx)
+  const marginBottom = Math.ceil(insetsPx.bottom / cellPx)
+  const marginLeft = Math.ceil(insetsPx.left / cellPx)
+  const marginRight = Math.ceil(insetsPx.right / cellPx)
+  if (marginTop <= 0 && marginBottom <= 0 && marginLeft <= 0 && marginRight <= 0) return []
+  const cells: GridCell[] = []
+  for (let x = 0; x < grid.cols; x++) {
+    for (let y = 0; y < grid.rows; y++) {
+      if (x < marginLeft || x >= grid.cols - marginRight || y < marginTop || y >= grid.rows - marginBottom) cells.push({ x, y })
+    }
+  }
+  return cells
+}
+
 // `settings.arenaVariant`/`settings.enabledPowerups` default this round's obstacle layout and
 // powerup pool; `snakeCount` is 1 (Solo) or 2 (Vs CPU / 2 Player) — identical spawn either way for
 // 2, a face-to-face pair on opposite halves of the board. `colors` lets /loadout's per-round color
 // pickers override the SNAKE_COLORS defaults. `random` defaults to Math.random so every existing
-// call site behaves normally, while a test can inject a seeded/fixed generator.
-export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, settings: SnakeRoundSettings, colors?: Partial<Record<SnakeId, string>>, random: () => number = Math.random): SnakeGameState {
+// call site behaves normally, while a test can inject a seeded/fixed generator. `cellPx`/
+// `safeAreaInsetsPx` default to 1/all-zero (no margin) — see buildUnsafeAreaCells above — so every
+// existing call site/test (predating safe-area avoidance) stays byte-identical.
+export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, settings: SnakeRoundSettings, colors?: Partial<Record<SnakeId, string>>, random: () => number = Math.random, cellPx: number = 1, safeAreaInsetsPx: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 }): SnakeGameState {
   const color1 = colors?.[1] ?? SNAKE_COLORS[1]
   const color2 = colors?.[2] ?? SNAKE_COLORS[2]
   const snakes: SnakeEntity[] = snakeCount === 1 ? [buildSnake(1, soloSpawnPoint(grid), color1)] : [buildSnake(1, faceToFaceSpawnPoint(1, grid), color1), buildSnake(2, faceToFaceSpawnPoint(2, grid), color2)]
@@ -132,7 +156,8 @@ export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, setti
   const obstacles = buildArenaObstacles(settings.arenaVariant, grid, snakeCount)
   const portals = buildArenaPortals(settings.arenaVariant, grid, snakeCount)
   const tunnels = buildArenaTunnels(settings.arenaVariant, grid, snakeCount)
-  const arenaCellSet = new Set<string>([...buildTunnelCellSet(tunnels), ...buildPortalLookup(portals).keys()])
+  const unsafeCells = buildUnsafeAreaCells(grid, cellPx, safeAreaInsetsPx)
+  const arenaCellSet = new Set<string>([...buildTunnelCellSet(tunnels), ...buildPortalLookup(portals).keys(), ...unsafeCells.map(cellKey)])
 
   // Solo has no opponent, so the four opponent-targeted powerups (coldblood/constrict/mesmerize/
   // frenzy) would never do anything — see types/index.ts's own SnakePowerupType comment. Filtered
@@ -144,7 +169,7 @@ export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, setti
   // never expected on any real playable grid, but keeps this total rather than throwing.
   const food = pickRandomEmptyCell(grid, buildSnakeOccupiedSet(snakes, obstacles), random, arenaCellSet) ?? { x: 0, y: 0 }
 
-  return { phase: 'playing', grid, snakes, food, wrapEdges: settings.wrapEdges, outcome: null, tick: 0, obstacles, portals, tunnels, enabledPowerups, pickups: [] }
+  return { phase: 'playing', grid, snakes, food, wrapEdges: settings.wrapEdges, outcome: null, tick: 0, obstacles, portals, tunnels, enabledPowerups, pickups: [], unsafeCells }
 }
 
 // Queues a turn for the next tick. Ignored outside 'playing', for a dead snake, an unknown
@@ -286,7 +311,7 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
   const portalLookup = buildPortalLookup(state.portals)
   const tunnelCellSet = buildTunnelCellSet(state.tunnels)
   const obstacleSet = new Set(obstacles.map(cellKey))
-  const arenaCellSet = new Set<string>([...tunnelCellSet, ...portalLookup.keys()])
+  const arenaCellSet = new Set<string>([...tunnelCellSet, ...portalLookup.keys(), ...state.unsafeCells.map(cellKey)])
 
   const aliveBefore = snakes.map((s) => s.alive)
   const direction = snakes.map((s) => s.pendingDirection ?? s.direction)

@@ -32,7 +32,8 @@ function makeState(overrides: Partial<SnakeGameState> = {}): SnakeGameState {
     portals: [],
     tunnels: [],
     enabledPowerups: [],
-    pickups: []
+    pickups: [],
+    unsafeCells: []
   }
   return { ...base, ...overrides }
 }
@@ -116,6 +117,45 @@ describe('createInitialSnakeState', () => {
       expect(next.phase).toBe('playing')
       expect(next.snakes.every((s) => s.alive)).toBe(true)
       expect(next.outcome).toBeNull()
+    })
+  })
+
+  describe('safe-area margin', () => {
+    it('defaults to no unsafeCells when cellPx/safeAreaInsetsPx are omitted', () => {
+      const state = createInitialSnakeState({ cols: 20, rows: 20 }, 1, roundSettings())
+      expect(state.unsafeCells).toEqual([])
+    })
+
+    it('marks no cells unsafe when safeAreaInsetsPx is explicitly all-zero', () => {
+      const state = createInitialSnakeState({ cols: 20, rows: 20 }, 1, roundSettings(), undefined, Math.random, 10, { top: 0, right: 0, bottom: 0, left: 0 })
+      expect(state.unsafeCells).toEqual([])
+    })
+
+    it('marks the ceil(inset/cellPx) cells along each edge unsafe, and none of the interior', () => {
+      // A 10x10 grid at cellPx=10: a 25px top inset and 15px left inset round up to 3 and 2 cells
+      // respectively (ceil(25/10)=3, ceil(15/10)=2) — anything less than a full cell of overlap
+      // still counts as unsafe, since food/a pickup only partially clear of the notch/Dynamic
+      // Island/speaker cutout is still partially hidden by it. Mirrors LightCycles' identical test.
+      const state = createInitialSnakeState({ cols: 10, rows: 10 }, 1, roundSettings(), undefined, Math.random, 10, { top: 25, right: 0, bottom: 0, left: 15 })
+      const unsafe = new Set(state.unsafeCells.map((c) => `${c.x},${c.y}`))
+      expect(unsafe.has('5,0')).toBe(true)
+      expect(unsafe.has('5,2')).toBe(true)
+      expect(unsafe.has('0,5')).toBe(true)
+      expect(unsafe.has('1,5')).toBe(true)
+      expect(unsafe.has('5,3')).toBe(false)
+      expect(unsafe.has('2,5')).toBe(false)
+      expect(unsafe.has('9,9')).toBe(false)
+    })
+
+    it('never places the very first food on a cell inside unsafeCells, even when it would otherwise be the only clear candidate', () => {
+      // A 3x3 grid at cellPx=10 with a 20px right inset and 20px bottom inset marks 2 cells unsafe
+      // along each of those edges (ceil(20/10)=2) — the only cell left outside that margin is
+      // (0,0), so without the exclusion food would have nowhere else to spawn.
+      const state = createInitialSnakeState({ cols: 3, rows: 3 }, 1, roundSettings(), undefined, Math.random, 10, { top: 0, right: 20, bottom: 20, left: 0 })
+      const unsafe = new Set(state.unsafeCells.map((c) => `${c.x},${c.y}`))
+      expect(unsafe.has('0,0')).toBe(false)
+      expect(unsafe.size).toBe(8)
+      expect(state.food).toEqual({ x: 0, y: 0 })
     })
   })
 })
@@ -330,6 +370,29 @@ describe('tickSnake', () => {
       const state = makeState({ obstacles: [{ x: 6, y: 5 }], food: { x: 5, y: 5 } })
       const next = tickSnake(state, fixedRandom(0.1))
       expect(next.food).not.toEqual({ x: 6, y: 5 })
+    })
+  })
+
+  describe('safe-area margin (unsafeCells)', () => {
+    // Every cell on the grid is marked unsafe, so pickRandomEmptyCell can never find a candidate at
+    // all — this isolates the exclusion itself (rather than depending on candidate-ordering/random
+    // value) since the only possible outcomes are "found nothing" if the exclusion works, or "landed
+    // somewhere" if it doesn't.
+    const grid = { cols: 10, rows: 10 }
+    const allCells: GridCell[] = []
+    for (let x = 0; x < grid.cols; x++) for (let y = 0; y < grid.rows; y++) allCells.push({ x, y })
+
+    it('leaves food exactly where it was if the safe-area margin covers every remaining candidate', () => {
+      // Snake eats at (5,5) this tick; with every cell unsafe, there's nowhere left to respawn it.
+      const state = makeState({ unsafeCells: allCells, food: { x: 5, y: 5 } })
+      const next = tickSnake(state, fixedRandom(0.1))
+      expect(next.food).toEqual({ x: 5, y: 5 })
+    })
+
+    it('never spawns a pickup at all if the safe-area margin covers every remaining candidate', () => {
+      const state = makeState({ enabledPowerups: ['sidewind'], unsafeCells: allCells, food: { x: 0, y: 0 } })
+      const next = tickSnake(state, fixedRandom(0.1))
+      expect(next.pickups).toEqual([])
     })
   })
 

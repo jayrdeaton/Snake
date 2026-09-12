@@ -27,6 +27,11 @@ import { gameActions } from '@/redux/gameSlice'
 import type { RootState } from '@/redux/store'
 import { Direction, GamePhase, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
 
+// A stable, referentially-constant all-zero insets object — see safeAreaInsetsPx's own comment
+// below for why this is passed instead of the device's real insets whenever the board isn't
+// actually bleeding under them.
+const ZERO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 }
+
 export default function GameScreen() {
   const params = useLocalSearchParams<{ mode?: string | string[]; p1Color?: string | string[]; p2Color?: string | string[] }>()
   // Safe fallback to solo — a direct deep-link, a stale/incoming param shape, or a missing param
@@ -86,7 +91,11 @@ export default function GameScreen() {
   // actually changes.
   const roundSettings: SnakeRoundSettings = useMemo(() => ({ wrapEdges, speedTier, arenaVariant, enabledPowerups }), [wrapEdges, speedTier, arenaVariant, enabledPowerups])
 
-  const { state, turn, activate, beginPlaying, retry, tickIntervalMs } = useSnakeState(grid, mode, roundSettings, cpuDifficulty, colors)
+  // All-zero unless the board is actually bleeding under the real insets (fullScreen) — see
+  // useSnakeState's own safeAreaInsetsPx comment for why: the non-fullScreen boardArea style below
+  // already stops short of the inset on its own, so there's nothing left for food/a pickup to avoid.
+  const safeAreaInsetsPx = fullScreen ? insets : ZERO_INSETS
+  const { state, turn, activate, beginPlaying, retry, tickIntervalMs } = useSnakeState(grid, mode, roundSettings, cpuDifficulty, colors, cellPx, safeAreaInsetsPx)
 
   // useSnakeState's own outer phase (onboarding -> playing -> gameOver — see that hook's own
   // extensive comment on why this is a different, hook-layer phase from the pure engine's inner

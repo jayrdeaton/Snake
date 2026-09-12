@@ -16,7 +16,7 @@
 // take on "crash then animate out" than LightCycles' own explosion+wipe, gating game.tsx's
 // GameOverDialog until the slowest dying snake's fade finishes.
 import { getColorRoles, useAutoPaperTheme } from '@rific/auto-paper'
-import { Canvas, Circle, Path, Rect, Skia, type SkPath } from '@shopify/react-native-skia'
+import { Canvas, Circle, Group, Path, Rect, Skia, type SkPath } from '@shopify/react-native-skia'
 import { type OrientationMode, useOrientationState } from '@tastic/core'
 import { cellToPixel } from '@tastic/grid'
 import { ObstacleRect } from '@tastic/sprites/shapes'
@@ -206,21 +206,30 @@ function buildCenterlineSamples(centers: Point[], cellPx: number): Sample[] {
 // its old cell toward the next one *by the exact same fraction*, and every interior point (any
 // corner strictly between them) never moves at all. A corner can only ever be cut if some vertex
 // that should stay put is instead lerped toward an unrelated target — this never moves one.
-function buildGlideBody(prevBody: GridCell[], currBody: GridCell[], progress: number): GridCell[] {
+// A raw single-axis delta (new cell minus old cell, e.g. newHead.x - oldHead.x), corrected for a
+// wrapEdges crossing on that axis. wrapEdges can land the new head non-adjacent to where it just
+// was (e.g. the last column wrapping to the first) — `raw` would then be a huge, whole-board-
+// spanning number instead of the genuine +-1 (or +-2, boosted) step that actually happened.
+// Compared against MAX_STEPS_PER_TICK, not a bare `1`, so a boosted snake's own legitimate 2-cell
+// step is left untouched. Correcting it back to the real small step (rather than the previous
+// approach of just snapping the whole tick's glide to its settled, no-motion shape) is what lets
+// buildGlideBody/headingAngle glide THROUGH a wrap exactly like any other step — see buildGlideBody
+// and SnakeBody's own wrapEcho for how the result (now legitimately just outside [0, size)) gets
+// rendered as a body sliding off one edge while a translated echo enters the other.
+function unwrapDelta(raw: number, size: number): number {
+  'worklet'
+  if (Math.abs(raw) <= MAX_STEPS_PER_TICK) return raw
+  return raw > 0 ? raw - size : raw + size
+}
+
+function buildGlideBody(prevBody: GridCell[], currBody: GridCell[], progress: number, grid: GridSize): GridCell[] {
   'worklet'
   const n = prevBody.length
   const oldHead = prevBody[n - 1]
   const newHead = currBody[currBody.length - 1]
-  // wrapEdges can land the new head non-adjacent to where it just was (e.g. the last column
-  // wrapping to the first) — gliding across that (or even just connecting the two with a straight
-  // segment at all) would draw a line clear across the whole board, so a wrap snaps straight to the
-  // settled shape for that one tick rather than gliding. Compared against MAX_STEPS_PER_TICK, not a
-  // bare `1` — a boosted snake's own legitimate 2-cell step must NOT hit this branch, or it'd never
-  // glide at all while sped up (every tick snapping instead of interpolating is exactly what reads
-  // as choppy/stuttery).
-  if (Math.abs(newHead.x - oldHead.x) > MAX_STEPS_PER_TICK || Math.abs(newHead.y - oldHead.y) > MAX_STEPS_PER_TICK) return currBody
-
-  const glidingHead = { x: oldHead.x + (newHead.x - oldHead.x) * progress, y: oldHead.y + (newHead.y - oldHead.y) * progress }
+  const dx = unwrapDelta(newHead.x - oldHead.x, grid.cols)
+  const dy = unwrapDelta(newHead.y - oldHead.y, grid.rows)
+  const glidingHead = { x: oldHead.x + dx * progress, y: oldHead.y + dy * progress }
 
   // Growing (ate food, see snakeEngine.ts's `[...s.body, nextCell]`) keeps the whole old body
   // exactly as it was, unchanged — only the new head segment extends out of it, growing from
@@ -265,21 +274,21 @@ function normalizeAngleDelta(delta: number): number {
   return d
 }
 
-function headingAngle(prevBody: GridCell[], currBody: GridCell[], progress: number, direction: Direction): number {
+function headingAngle(prevBody: GridCell[], currBody: GridCell[], progress: number, direction: Direction, grid: GridSize): number {
   'worklet'
   const n = prevBody.length
   const oldHead = prevBody[n - 1]
   const newHead = currBody[currBody.length - 1]
-  const dx = newHead.x - oldHead.x
-  const dy = newHead.y - oldHead.y
-  // A wrap crossing (see buildGlideBody's own identical MAX_STEPS_PER_TICK check) has no meaningful
-  // angle between oldHead and newHead — they're on opposite sides of the board. A fresh spawn or an
-  // unchanged (dead) body has oldHead === newHead, the same zero-vector problem. Either way, the
-  // engine's own already-resolved `direction` is exactly this tick's real heading regardless, so
-  // fall back to it. A boosted snake's straight 2-cell step also lands here (dx/dy up to
-  // MAX_STEPS_PER_TICK), but harmlessly — direction can't change mid-tick (see tickSnake's own
-  // once-per-tick direction resolution), so the fallback is already the exact right angle.
-  if ((dx === 0 && dy === 0) || Math.abs(dx) > MAX_STEPS_PER_TICK || Math.abs(dy) > MAX_STEPS_PER_TICK) return DIRECTION_ANGLE[direction]
+  // unwrapDelta (see buildGlideBody's own identical correction) turns a wrap crossing back into
+  // the genuine +-1/+-2 step it actually was, so a turn-while-wrapping (e.g. turning to walk off
+  // the top edge, wrapping to the bottom) still gets the same smooth interpolated turn below as
+  // any other turn, instead of snapping the head's facing instantly.
+  const dx = unwrapDelta(newHead.x - oldHead.x, grid.cols)
+  const dy = unwrapDelta(newHead.y - oldHead.y, grid.rows)
+  // A fresh spawn or an unchanged (dead) body has oldHead === newHead, a zero vector atan2 can't
+  // resolve — the engine's own already-resolved `direction` is exactly this tick's real heading
+  // regardless, so fall back to it.
+  if (dx === 0 && dy === 0) return DIRECTION_ANGLE[direction]
   const newAngle = Math.atan2(dy, dx)
   if (n < 2) return newAngle
   const beforeOldHead = prevBody[n - 2]
@@ -291,11 +300,13 @@ function headingAngle(prevBody: GridCell[], currBody: GridCell[], progress: numb
 // frequency), ramping amplitude from 0 at the head up to full over the first few cells behind it.
 // A standalone 'worklet' function (rather than an inline arrow) since it's called from inside
 // useDerivedValue callbacks below — see LightCycles' GameBoard.tsx's partialTrailPath for the same
-// precedent/reasoning in this codebase family.
-function offsetSamplesForWave(samples: Sample[], phase: number, frequency: number, amplitude: number, rampLength: number): Point[] {
+// precedent/reasoning in this codebase family. `total` is the reference the head-relative ramp
+// measures from — the body's own true arc length normally, but see `paths`' own `referenceTotal`
+// for why a growing snake passes something else instead (a sample past it just reads as "beyond
+// the head," clamping its ramp to 0 — no separate growing-branch logic needed here).
+function offsetSamplesForWave(samples: Sample[], phase: number, frequency: number, amplitude: number, rampLength: number, total: number): Point[] {
   'worklet'
   if (samples.length === 0) return []
-  const total = samples[samples.length - 1].dist
   const points: Point[] = new Array(samples.length)
   for (let i = 0; i < samples.length; i++) {
     const s = samples[i]
@@ -411,11 +422,15 @@ function segmentBreakpoints(total: number, cellPx: number): number[] {
   return breaks
 }
 
-function buildBodySegments(points: Point[], samples: Sample[], cellPx: number, isOutline: boolean): PathSegment[] {
+// `total` is the reference arc length these BODY_SEGMENT_COUNT segments are chopped over — the
+// body's own true length normally, but see `paths`' own `referenceTotal` for why a growing snake
+// freezes this at the pre-growth length instead: any live sample past it (the newly-growing bit)
+// is simply left uncovered by every segment here, on purpose — buildGrowthStubSegment below is
+// what draws that leftover piece.
+function buildBodySegments(points: Point[], samples: Sample[], cellPx: number, isOutline: boolean, total: number): PathSegment[] {
   'worklet'
   const n = points.length
   if (n === 0) return emptySegments(BODY_SEGMENT_COUNT)
-  const total = samples[n - 1].dist
   const breaks = segmentBreakpoints(total, cellPx)
   const segments: PathSegment[] = []
   for (let seg = 0; seg < BODY_SEGMENT_COUNT; seg++) {
@@ -441,6 +456,32 @@ function buildBodySegments(points: Point[], samples: Sample[], cellPx: number, i
     segments.push({ path, width: hw * 2, dist: midDist })
   }
   return segments
+}
+
+// Step 5b — the one bit buildBodySegments' own frozen `total` deliberately leaves uncovered while
+// growing: whatever live samples sit past the pre-growth reference length, i.e. the newly-growing
+// piece of neck stretching out toward the live head. Rendered at ONE constant width (the neck's
+// own minimum — bodyHalfWidthAt evaluated exactly at the boundary, where distFromHead is 0) rather
+// than a taper of its own, so it reads as a fresh stub still being formed rather than an already-
+// established, already-tapered length of body — and with no wave offset, already implied for free
+// by offsetSamplesForWave's own ramp clamping to 0 for any sample past that same reference. Not
+// growing (referenceTotal === the samples' own true total) collapses this to a single moveTo with
+// no lineTo after it — Skia draws nothing for that, so the stub is simply invisible outside a
+// growth tick, no separate on/off flag needed.
+function buildGrowthStubSegment(points: Point[], samples: Sample[], cellPx: number, isOutline: boolean, referenceTotal: number): PathSegment {
+  'worklet'
+  const n = points.length
+  if (n === 0) return { path: Skia.Path.Make(), width: 0, dist: referenceTotal }
+  let startIdx = 0
+  while (startIdx < n - 1 && samples[startIdx + 1].dist <= referenceTotal) startIdx++
+  const path = Skia.Path.Make()
+  path.moveTo(points[startIdx].x, points[startIdx].y)
+  for (let i = startIdx + 1; i < n; i++) {
+    if (samples[i].seam) path.moveTo(points[i].x, points[i].y)
+    else path.lineTo(points[i].x, points[i].y)
+  }
+  const hw = bodyHalfWidthAt(referenceTotal, referenceTotal, cellPx, isOutline)
+  return { path, width: hw * 2, dist: referenceTotal }
 }
 
 // How wide the centerline accent reads relative to the body's own current FILL width at that same
@@ -679,14 +720,20 @@ interface SnakeBodyProps {
   // below (see bodyProgress); nothing else in this component cares which tick it is.
   tick: number
   tickIntervalMs: number
+  // Needed only for unwrapDelta (see buildGlideBody/headingAngle/wrapEcho) to know how far past an
+  // edge a wrapEdges crossing's raw delta needs correcting back by — not used for anything else
+  // here, since every other measurement in this component is already purely pixel/cellPx-based.
+  grid: GridSize
 }
 
-function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, tickIntervalMs }: SnakeBodyProps) {
+function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, tickIntervalMs, grid }: SnakeBodyProps) {
   const frequency = (2 * Math.PI) / (WAVE_WAVELENGTH_CELLS * cellPx)
-  // A dead snake's body no longer undulates — freezing the wave here (rather than only fading it
-  // out) is what makes a corpse read as inert while it fades, rather than still gently slithering
-  // in place through its own last committed shape.
-  const amplitude = snake.alive ? WAVE_AMPLITUDE_RATIO * cellPx : 0
+  // A dead snake's body no longer undulates — its amplitude stays exactly what a live snake's is
+  // (see wavePhase below, which freezes the PHASE instead) so the corpse holds its last-committed
+  // S-curve while it fades, rather than either still gently slithering in place (an unfrozen phase)
+  // or instantly snapping flat to the raw centerline (a zeroed amplitude — the bug this replaced:
+  // the body visibly lost its wave and went ramrod straight the instant the snake died).
+  const amplitude = WAVE_AMPLITUDE_RATIO * cellPx
   const rampLength = WAVE_RAMP_CELLS * cellPx
   const deathFadeBandPx = SNAKE_DEATH_FADE_BAND_CELLS * cellPx
   // A small fixed per-snake phase offset (id-based, not random) so two snakes on the same board
@@ -711,12 +758,18 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
   // GameOverFlash's own prevPhaseRef pattern, and LightCycles' identical per-entity death effect).
   const deathProgress = useSharedValue(0)
   const deathAnimStartedRef = useRef(false)
+  // The wave's own raw phase input, snapshotted the instant this snake dies — see wavePhase below
+  // (inside `paths`), which reads this instead of the live, still-advancing `phase` shared value
+  // once dead. Freezing the PHASE (not the amplitude — see `amplitude`'s own comment above) is what
+  // lets a corpse hold its last-committed S-curve.
+  const deathPhaseSV = useSharedValue(0)
 
   useEffect(() => {
     if (snake.alive || deathAnimStartedRef.current) return
     deathAnimStartedRef.current = true
+    deathPhaseSV.value = phase.value
     deathProgress.value = withTiming(1, { duration: snakeDeathFadeMs(snake.body.length), easing: Easing.linear })
-  }, [snake.alive, snake.body.length, deathProgress])
+  }, [snake.alive, snake.body.length, deathProgress, phase, deathPhaseSV])
 
   useEffect(() => {
     if (tick === 0) {
@@ -733,6 +786,8 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
       // at progress=1 from the previous round.
       // eslint-disable-next-line react-hooks/immutability -- SharedValue.value mutation, not reactive state; see comment above
       deathProgress.value = 0
+      // eslint-disable-next-line react-hooks/immutability -- SharedValue.value mutation, not reactive state; see comment above
+      deathPhaseSV.value = 0
       deathAnimStartedRef.current = false
       return
     }
@@ -746,7 +801,36 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
     currBodySV.value = snake.body
     bodyProgress.value = 0
     bodyProgress.value = withTiming(1, { duration: tickIntervalMs, easing: Easing.linear })
-  }, [tick, tickIntervalMs, snake.body, prevBodySV, currBodySV, bodyProgress, deathProgress])
+  }, [tick, tickIntervalMs, snake.body, prevBodySV, currBodySV, bodyProgress, deathProgress, deathPhaseSV])
+
+  // Non-null for exactly the one render where a new, just-arrived `snake.body` is a wrapEdges
+  // crossing (the same comparison buildGlideBody's own unwrapDelta makes internally, done here in
+  // plain JS instead) — the pixel offset an extra, fully-duplicate copy of this snake needs so it
+  // reads as sliding in from the OPPOSITE edge while the primary copy (now legitimately drawn
+  // slightly outside the canvas for that tick's glide — see unwrapDelta) slides off this one, the
+  // classic Asteroids/Pac-Man wraparound look instead of the old snap. A plain computed value
+  // rather than state-in-an-effect (which a first cut at this used, and which
+  // react-hooks/set-state-in-effect rightly flagged): SnakeBody only ever re-renders when `snake`
+  // itself changes (once per tick, from Redux), and currBodySV.value at render time still holds
+  // whatever the PREVIOUS tick's effect committed — the tick effect above hasn't run yet for THIS
+  // render — so comparing the two here already reads exactly "this tick's move," with no need to
+  // stash it in state first. Naturally null again on the very next render once the head is no
+  // longer jumping (the ordinary case), so the echo is OMITTED from the tree entirely (not just
+  // hidden) outside the one tick it's actually needed for.
+  const wrapEcho = ((): { dx: number; dy: number } | null => {
+    if (tick === 0 || snake.body === currBodySV.value) return null
+    const oldHead = currBodySV.value[currBodySV.value.length - 1]
+    const newHead = snake.body[snake.body.length - 1]
+    const rawDx = newHead.x - oldHead.x
+    const rawDy = newHead.y - oldHead.y
+    // Sign comes from the UNWRAPPED delta (the real step direction), not the raw one — a wrap's
+    // raw delta always swings to the opposite extreme of the actual step (e.g. a genuine +1
+    // rightward step reads as a huge -19 raw delta on a 20-wide grid), so building the echo's
+    // offset straight off the raw sign would shift it the wrong way entirely.
+    if (Math.abs(rawDx) > MAX_STEPS_PER_TICK) return { dx: -Math.sign(unwrapDelta(rawDx, grid.cols)) * grid.cols * cellPx, dy: 0 }
+    if (Math.abs(rawDy) > MAX_STEPS_PER_TICK) return { dx: 0, dy: -Math.sign(unwrapDelta(rawDy, grid.rows)) * grid.rows * cellPx }
+    return null
+  })()
 
   // Ties the wave's own temporal speed to the snake's actual forward pace rather than the fixed,
   // independent WAVE_SPEED constant useContinuousPhase's driver runs at (that constant is tuned for
@@ -765,21 +849,47 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
   // that helper isn't a 'worklet', so calling it from here would work by accident on web (no real
   // UI-thread boundary there) but throw on native, where worklets can't call plain JS functions.
   const interpolatedCenters = useDerivedValue(() => {
-    const floatBody = buildGlideBody(prevBodySV.value, currBodySV.value, bodyProgress.value)
+    const floatBody = buildGlideBody(prevBodySV.value, currBodySV.value, bodyProgress.value, grid)
     return floatBody.map((cell) => ({ x: cell.x * cellPx + cellPx / 2, y: cell.y * cellPx + cellPx / 2 }))
   })
 
   const paths = useDerivedValue(() => {
     const centers = interpolatedCenters.value
     const sampleSet = buildCenterlineSamples(centers, cellPx)
-    const points = offsetSamplesForWave(sampleSet, phase.value * wavePhaseScale + phaseOffset, frequency, amplitude, rampLength)
-    const outlineSegments = buildBodySegments(points, sampleSet, cellPx, true)
-    const fillSegments = buildBodySegments(points, sampleSet, cellPx, false)
+    // Alive: ride the live, still-advancing `phase` shared value like every other snake's wave.
+    // Dead: hold at deathPhaseSV's own snapshot instead — otherwise the phase (which keeps
+    // advancing for the whole board regardless of any one snake's state) would keep sliding the
+    // sine underneath a corpse's now-static centers, reading as it gently slithering in place.
+    const wavePhase = (snake.alive ? phase.value : deathPhaseSV.value) * wavePhaseScale + phaseOffset
     const total = sampleSet.length > 0 ? sampleSet[sampleSet.length - 1].dist : 0
-    return { outlineSegments, fillSegments, total }
+    // Growing (see buildGlideBody's own growing branch) keeps every existing point fixed in place,
+    // but `total` itself still climbs continuously over the whole tick as the new head segment
+    // extends out — and since the neck taper + wave ramp are both measured *from the head*
+    // (distFromHead = total - dist), every point within reach of either recomputes against that
+    // climbing total the whole time, even though it never actually moved: a fixed point one cell
+    // behind the head widens by roughly 40% over a single growth tick, and the wave ramp shifts
+    // with it — the established body visibly "reconfiguring" the instant its length changes,
+    // worse the more a turn happens to sit in the reflowing stretch. Freezing the reference these
+    // two measure against at the PRE-growth body's own length — exactly (N-1)*cellPx, since grid
+    // steps are always exactly one cell apart, wrapEdges seams included (see buildCenterlineSamples'
+    // own seam handling) — keeps the established body looking exactly as it did the instant before
+    // eating; only the newly-growing bit (now past that frozen reference) reads as a bare, wave-
+    // less neck stub (see buildGrowthStubSegment) until it's folded into the settled body on the
+    // NEXT tick, when this all recomputes fresh against the new, longer total. Matches the classic
+    // "grows at the neck, body doesn't reflow" look rather than the whole taper rescaling live.
+    const isGrowing = currBodySV.value.length > prevBodySV.value.length
+    const referenceTotal = isGrowing ? (prevBodySV.value.length - 1) * cellPx : total
+    const points = offsetSamplesForWave(sampleSet, wavePhase, frequency, amplitude, rampLength, referenceTotal)
+    const outlineSegments = buildBodySegments(points, sampleSet, cellPx, true, referenceTotal)
+    const fillSegments = buildBodySegments(points, sampleSet, cellPx, false, referenceTotal)
+    const outlineStub = buildGrowthStubSegment(points, sampleSet, cellPx, true, referenceTotal)
+    const fillStub = buildGrowthStubSegment(points, sampleSet, cellPx, false, referenceTotal)
+    return { outlineSegments, fillSegments, outlineStub, fillStub, total }
   })
   const outlineSegmentsSV = useDerivedValue(() => paths.value.outlineSegments)
   const fillSegmentsSV = useDerivedValue(() => paths.value.fillSegments)
+  const outlineStubSV = useDerivedValue(() => [paths.value.outlineStub])
+  const fillStubSV = useDerivedValue(() => [paths.value.fillStub])
   // The body's own total arc length (tail to head) this frame — the death fade's tail-to-head sweep
   // (see fadeFactorForDist) needs this both per-segment (via BodySegment's own totalDist prop) and
   // once more for the head/eyes below, which sit at exactly `dist = total`.
@@ -791,7 +901,7 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
   // muted fill below — so the head reads as the "business end" rather than blending into the body.
   const headX = useDerivedValue(() => interpolatedCenters.value[interpolatedCenters.value.length - 1].x)
   const headY = useDerivedValue(() => interpolatedCenters.value[interpolatedCenters.value.length - 1].y)
-  const headAngle = useDerivedValue(() => headingAngle(prevBodySV.value, currBodySV.value, bodyProgress.value, snake.direction))
+  const headAngle = useDerivedValue(() => headingAngle(prevBodySV.value, currBodySV.value, bodyProgress.value, snake.direction, grid))
 
   // The head's own size — starts at HEAD_START_SCALE and animates up to full size (1) over the
   // first HEAD_GROWTH_APPLES points scored, then holds — see headScaleForScore's own comment. A
@@ -889,7 +999,12 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
   const controlRingRadius = useDerivedValue(() => cellPx * headScale.value * 1.15)
   const shieldRingRadius = useDerivedValue(() => cellPx * headScale.value * 1.35)
 
-  return (
+  // Everything this snake draws, as one reusable element tree — rendered once normally, and a
+  // second time (unchanged, just translated) inside the wrapEcho Group below during the one tick
+  // a wrapEdges crossing is animating through. Rendering the exact same elements twice like this is
+  // safe: each occurrence sits under its own parent (this fragment vs. the Group), so the `key`s
+  // inside only need to stay unique within THEIR OWN copy, not globally.
+  const bodyContent = (
     <>
       {/* Body — BODY_SEGMENT_COUNT constant-width stroke segments per layer (see buildBodySegments),
       not one variable-width shape: the wider, vivid outline layer drawn first, then the narrower
@@ -901,6 +1016,10 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
       {BODY_SEGMENT_INDICES.map((i) => (
         <BodySegment key={`fill-${i}`} segmentsSV={fillSegmentsSV} index={i} color={bodyFillColor} baseOpacity={bodyBaseOpacity} deathProgress={deathProgress} totalDist={totalDistSV} bandPx={deathFadeBandPx} />
       ))}
+      {/* Step 5b — the growth stub (see buildGrowthStubSegment): empty, and so invisible, outside a
+      growth tick. Drawn right after the main layers it shares a color/width convention with. */}
+      <BodySegment segmentsSV={outlineStubSV} index={0} color={snake.color} baseOpacity={bodyBaseOpacity} deathProgress={deathProgress} totalDist={totalDistSV} bandPx={deathFadeBandPx} />
+      <BodySegment segmentsSV={fillStubSV} index={0} color={bodyFillColor} baseOpacity={bodyBaseOpacity} deathProgress={deathProgress} totalDist={totalDistSV} bandPx={deathFadeBandPx} />
       {/* Step 6 — centerline accent: a thin theme-tertiary line traced right over the fill layer's
       own already-tapered, already-undulating segments (just narrower, see
       BELLY_ACCENT_WIDTH_FRACTION), rather than a second duplicate segment build — same technique
@@ -908,6 +1027,7 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
       {BODY_SEGMENT_INDICES.map((i) => (
         <BodySegment key={`accent-${i}`} segmentsSV={fillSegmentsSV} index={i} color={tertiaryColor} baseOpacity={BELLY_ACCENT_OPACITY} deathProgress={deathProgress} totalDist={totalDistSV} bandPx={deathFadeBandPx} widthScale={BELLY_ACCENT_WIDTH_FRACTION} />
       ))}
+      <BodySegment segmentsSV={fillStubSV} index={0} color={tertiaryColor} baseOpacity={BELLY_ACCENT_OPACITY} deathProgress={deathProgress} totalDist={totalDistSV} bandPx={deathFadeBandPx} widthScale={BELLY_ACCENT_WIDTH_FRACTION} />
       {/* The head/eyes/accent used to vanish the instant snake.alive went false — now they stay
       drawn and fade via headOpacity (see that derivation's own comment: the head sits at the very
       end of the tail-to-head sweep, so it's the last thing to disappear, right as the fade
@@ -936,6 +1056,24 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
       {speedRingColor && <Circle cx={headX} cy={headY} r={speedRingRadius} style='stroke' strokeWidth={2} color={speedRingColor} opacity={headOpacity} />}
       {controlRingColor && <Circle cx={headX} cy={headY} r={controlRingRadius} style='stroke' strokeWidth={2} color={controlRingColor} opacity={headOpacity} />}
       {shieldRingColor && <Circle cx={headX} cy={headY} r={shieldRingRadius} style='stroke' strokeWidth={2} color={shieldRingColor} opacity={headOpacity} />}
+    </>
+  )
+
+  // wrapEcho (see its own declaration above) is only ever non-null for the single tick a wrapEdges
+  // crossing is animating through — buildGlideBody's own unwrapDelta already lets the primary copy
+  // above glide legitimately just outside [0, grid.cols/rows) instead of snapping, so the canvas
+  // (sized to exactly grid.cols*cellPx by grid.rows*cellPx — see game.tsx's designWidth/designHeight)
+  // already clips that overhang into a natural "sliding off the edge" look on its own. This second,
+  // translated copy is what completes the illusion: shifted by one whole grid dimension, it's the
+  // same snake re-drawn on the OPPOSITE side, so the same overhanging bit that got clipped off the
+  // primary copy is exactly what's now poking INTO the canvas here — the classic wraparound-screen
+  // "exits one edge, enters the other" look, not the old instant snap. Every other, non-wrapping
+  // tick this stays unmounted entirely (not just hidden), so there's no ongoing cost to it.
+  if (!wrapEcho) return bodyContent
+  return (
+    <>
+      {bodyContent}
+      <Group transform={[{ translateX: wrapEcho.dx }, { translateY: wrapEcho.dy }]}>{bodyContent}</Group>
     </>
   )
 }
@@ -1216,7 +1354,7 @@ export function SnakeBoard({ snakes, food, obstacles, portals, tunnels, pickups,
       <FoodDot food={food} cellPx={cellPx} phase={phaseDriver} color={colors.primary} />
       <Pickups pickups={pickups} cellPx={cellPx} phase={phaseDriver} color={colors.secondary} />
       {snakes.map((snake) => (
-        <SnakeBody key={snake.id} snake={snake} cellPx={cellPx} phase={phaseDriver} tertiaryColor={colors.tertiary} surfaceColor={colors.surface} tick={tick} tickIntervalMs={tickIntervalMs} />
+        <SnakeBody key={snake.id} snake={snake} cellPx={cellPx} phase={phaseDriver} tertiaryColor={colors.tertiary} surfaceColor={colors.surface} tick={tick} tickIntervalMs={tickIntervalMs} grid={grid} />
       ))}
       <GameOverFlash phase={phase} grid={grid} cellPx={cellPx} />
     </Canvas>

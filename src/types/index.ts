@@ -179,6 +179,15 @@ export interface SnakeGameState {
   // Board-wide, not per-snake — at most one entry at a time (see snakeEngine.ts's
   // maybeSpawnSnakePickup), so a linear scan is fine.
   pickups: SnakePowerupPickup[]
+  // Cells inside the round's device safe-area margin (see snakeEngine.ts's buildUnsafeAreaCells) —
+  // only non-empty when the round is bleeding under that margin (fullScreen; see the Settings
+  // preference of the same name), since otherwise the board's own pixel container already stops
+  // short of the inset and every cell is already clear of it. Food/pickups never spawn here (see
+  // createInitialSnakeState/tickSnake) because a notch/Dynamic Island/home-indicator/speaker cutout
+  // can physically hide them there — the board itself stays fully traversable, same as any other
+  // cosmetically-obscured cell. Computed once in createInitialSnakeState and never mutated after,
+  // same as `obstacles`.
+  unsafeCells: GridCell[]
 }
 
 // Bundles the per-round settings useSnakeState/createInitialSnakeState need, rather than growing

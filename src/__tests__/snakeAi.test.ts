@@ -26,7 +26,8 @@ function makeState(overrides: Partial<SnakeGameState> = {}): SnakeGameState {
     portals: [],
     tunnels: [],
     enabledPowerups: [],
-    pickups: []
+    pickups: [],
+    unsafeCells: []
   }
   return { ...base, ...overrides }
 }

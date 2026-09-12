@@ -36,10 +36,13 @@ const CPU_SNAKE_ID: SnakeId = 2
 // 'roundOver'; tick loop torn down again). The engine's inner `phase` and this outer one are
 // deliberately two different fields tracked in two different places — see SnakeGameState's own
 // comment in types/index.ts for why the engine itself has no idea an "onboarding" concept exists.
-export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRoundSettings, cpuDifficulty: CpuDifficulty, colors?: Partial<Record<SnakeId, string>>) {
+// cellPx/safeAreaInsetsPx default to 1/all-zero (no margin) — see createInitialSnakeState's own
+// comment for why: this hook's caller (GameScreen) is what decides whether safeAreaInsetsPx is
+// actually the device's real insets or zeroed out (see that screen's own fullScreen branch).
+export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRoundSettings, cpuDifficulty: CpuDifficulty, colors?: Partial<Record<SnakeId, string>>, cellPx: number = 1, safeAreaInsetsPx: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 }) {
   const snakeCount = snakeCountForMode(mode)
 
-  const [state, setState] = useState(() => createInitialSnakeState(grid, snakeCount, settings, colors))
+  const [state, setState] = useState(() => createInitialSnakeState(grid, snakeCount, settings, colors, Math.random, cellPx, safeAreaInsetsPx))
 
   // Only the two transitions this hook actually decides on its own — 'onboarding' (beginPlaying
   // not yet called) vs 'playing' (it has). Whether the outer phase has further moved on to
@@ -94,9 +97,9 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRo
   }, [])
 
   const retry = useCallback(() => {
-    setState(createInitialSnakeState(grid, snakeCount, settings, colors))
+    setState(createInitialSnakeState(grid, snakeCount, settings, colors, Math.random, cellPx, safeAreaInsetsPx))
     setPhaseIntent('onboarding')
-  }, [grid, snakeCount, settings, colors])
+  }, [grid, snakeCount, settings, colors, cellPx, safeAreaInsetsPx])
 
   // ─── Tick loop ──────────────────────────────────────────────────────────
   // Same rAF variable-tick-rate loop structure as LightCycles' useGameState.ts: runs only while the
