@@ -1,5 +1,5 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
-import { getFixedZoneRotation, getOpposingZoneRotation, useOrientationState } from '@tastic/core'
+import { getFixedZoneRotation, getOpposingZoneRotation, getViewRotation, useOrientationState } from '@tastic/core'
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
@@ -25,6 +25,10 @@ export interface OnboardingOverlayProps {
   // color only actually gets used below when humanPlayers.length is 2 — i.e. Vs CPU's own CPU-
   // colored zone is simply never rendered, matching the single-zone branch not needing it).
   colors: { snake1: string; snake2?: string }
+  // Only consulted in the solo/vsCpu branch below (humanPlayers.length === 1) — the two-player
+  // branch has no lock concept of its own, same reasoning as GameActionChips' identical split in
+  // game.tsx.
+  lockOrientation: boolean
 }
 
 const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
@@ -32,16 +36,23 @@ const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
 // A temporary UI layer over the board — not part of the Skia canvas (see SnakeBoard.tsx's own
 // header comment). Ported from LightCycles' OnboardingOverlay.tsx: a "3, 2, 1, GO!" countdown that
 // fades out and calls onComplete. Dropped relative to that version, per the build brief: round-
-// history pips (no match-series/rematch concept in Snake) are gone entirely, and per-player zone
-// ROTATION is simplified to just the opposing seat's own 180°/±90° flip (via
-// getFixedZoneRotation/getOpposingZoneRotation) rather than threading a live `rotation` prop in
-// from the screen — this overlay has no dialog-style content of its own to keep consistent with
-// anything else, unlike SettingsDialog.
-export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: OnboardingOverlayProps) {
+// history pips (no match-series/rematch concept in Snake) are gone entirely. Rotation is computed
+// internally from lockOrientation + this component's own useOrientationState() calls rather than
+// threaded in as a `rotation` prop the way SettingsDialog/GameOverDialog take it — the two-zone
+// branch's getFixedZoneRotation/getOpposingZoneRotation pair (fixed physical zones, glyph-only
+// rotate) and the solo/vsCpu branch's getViewRotation (no zone to protect, so it also repositions
+// under a live tilt) are different enough that folding them into one shared prop wouldn't simplify
+// anything here.
+export default function OnboardingOverlay({ onComplete, humanPlayers, colors, lockOrientation }: OnboardingOverlayProps) {
   const { fonts } = useAutoPaperTheme()
   const opacity = useSharedValue(1)
   const [stageIndex, setStageIndex] = useState(0)
   const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
+  // A second, independent, lock-aware subscription — only used by the solo/vsCpu branch below,
+  // which (unlike the two-zone branch's getFixedZoneRotation) has no second seat's zone to protect,
+  // so a portrait upside-down hold should flip its countdown too instead of being ignored.
+  const soloOrientation = useOrientationState(lockOrientation)
+  const soloRotation = getViewRotation(soloOrientation.orientationMode, soloOrientation.p1OnRight, soloOrientation.upsideDown)
 
   const { playCountdownTick, playCountdownGo } = useSnakeSounds()
   const soundRef = useRef({ playCountdownTick, playCountdownGo })
@@ -87,7 +98,7 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
     return (
       <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]} pointerEvents='none'>
         <View style={[styles.zone, styles.zoneFull, { borderColor: colors.snake1, backgroundColor: `${colors.snake1}22` }]}>
-          <Text style={[styles.countdown, { fontFamily: fonts.displayLarge.fontFamily }]}>{countdown}</Text>
+          <Text style={[styles.countdown, { fontFamily: fonts.displayLarge.fontFamily }, soloRotation % 360 !== 0 && { transform: [{ rotate: `${soloRotation}deg` }] }]}>{countdown}</Text>
         </View>
       </Animated.View>
     )

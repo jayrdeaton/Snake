@@ -1,9 +1,9 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { IconButton, useVibration } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
-import { computeContentBounds, getFixedZoneRotation, useOrientationState, useSettledWindowDimensions } from '@tastic/core'
+import { computeContentBounds, getFixedZoneRotation, getViewRotation, rotateInsets, useOrientationState, useSettledWindowDimensions } from '@tastic/core'
 import { computeGridSize } from '@tastic/grid'
-import { needsSharedNeutralZone } from '@tastic/split-screen'
+import { FakeLandscapeView, needsSharedNeutralZone } from '@tastic/split-screen'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
@@ -42,6 +42,7 @@ export default function GameScreen() {
 
   const { width, height } = useSettledWindowDimensions()
   const fullScreen = useSelector((state: RootState) => state.game.fullScreen)
+  const lockOrientation = useSelector((state: RootState) => state.game.lockOrientation)
   // Resolved once here (not inside the computeGridSize useMemo below) since designWidth/
   // designHeight and the cellPx prop passed to SnakeBoard both need the same resolved pixel size
   // too — see constants/snake.ts's own SNAKE_CELL_PX comment for what each tier actually means.
@@ -270,16 +271,15 @@ export default function GameScreen() {
   // fade takes longer, rather than revealing the dialog over a still-fading loser.
   const [showGameOverDialog, setShowGameOverDialog] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  // Matches GameActionChips' own rotation below exactly (same useOrientationState()/
-  // getFixedZoneRotation call, no lock argument) — SettingsDialog renders via a react-native-paper
-  // Portal (nothing else transforms it), so without this the far seat in a rotating 2-player match
-  // would see it upright relative to the device's fixed physical frame instead of to themselves,
-  // unlike GameActionChips' own back/settings chips right next to it. A second, independent
-  // subscription rather than a shared one: GameActionChips computes this internally from its own
-  // useOrientationState() call and doesn't receive it as a prop, so there's no existing value in
-  // this parent scope to reuse instead.
-  const { orientationMode: settingsOrientationMode, p1OnRight: settingsP1OnRight, upsideDown: settingsUpsideDown } = useOrientationState()
-  const settingsRotation = getFixedZoneRotation(settingsOrientationMode, settingsP1OnRight, settingsUpsideDown)
+  // SettingsDialog and GameOverDialog are both a single centered card with no second seat's zone to
+  // stay neutral for (see each one's own doc) — getViewRotation, not getFixedZoneRotation, so a
+  // portrait upside-down hold repositions/flips them too instead of being silently ignored, same as
+  // index.tsx's own identical rotation for its title-screen dialog. lockOrientation-aware (unlike
+  // GameActionChips' own neutral-zone rotation below, which has no lock concept of its own): a
+  // second, independent subscription rather than a shared one, since GameActionChips computes its
+  // own orientation reading internally and doesn't receive one as a prop.
+  const { orientationMode: overlayOrientationMode, p1OnRight: overlayP1OnRight, upsideDown: overlayUpsideDown } = useOrientationState(lockOrientation)
+  const overlayRotation = getViewRotation(overlayOrientationMode, overlayP1OnRight, overlayUpsideDown)
 
   useEffect(() => {
     if (state.phase !== 'roundOver') return undefined
@@ -340,15 +340,15 @@ export default function GameScreen() {
       </View>
       <KeyboardInputLayer enabled={phase === 'playing'} humanPlayers={humanPlayers} controlScheme={controlScheme} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} />
 
-      {phase === 'onboarding' && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} />}
+      {phase === 'onboarding' && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} lockOrientation={lockOrientation} />}
 
-      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(highScores[mode], recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={handleHome} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} />}
+      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(highScores[mode], recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={handleHome} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} rotation={overlayRotation} />}
 
       {/* Kept as its own sibling of the board/gesture tree above, mirroring LightCycles'/BoxHockey's
       identically-motivated MatchOverlays split — this live tilt subscription's re-renders should
       never cascade into the board/touch-input subtree. */}
-      <GameActionChips showBack={phase === 'onboarding'} showSettings={phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)} onBack={() => router.back()} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} />
-      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={settingsRotation} />
+      <GameActionChips showBack={phase === 'onboarding'} showSettings={phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)} onBack={() => router.back()} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} lockOrientation={lockOrientation} />
+      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={overlayRotation} />
     </View>
   )
 }
@@ -362,26 +362,38 @@ interface GameActionChipsProps {
   // needsSharedNeutralZone's own doc for why that (not bare orientationMode) is what actually
   // decides whether the neutral slot is needed.
   humanPlayerCount: number
+  // Only consulted in the non-neutral (corner) branch below, for FakeLandscapeView's own `locked`
+  // — the neutral branch has no lock concept of its own (see its own comment) and stays unlocked.
+  lockOrientation: boolean
 }
 
-// Back/settings chips, neutral-positioned on whichever dividing line is actually live right now —
-// unlike LightCycles'/BoxHockey's boards (always face-to-face, so the wall/midline is always
-// horizontal), Snake's board genuinely supports both face-to-face AND side-by-side (see
-// TouchInputLayer.tsx/OnboardingOverlay.tsx's own zone splits, both of which switch on the same
-// live orientationMode), so the neutral line itself flips between horizontal and vertical along
-// with it. Mirrors OnboardingOverlay's own zoneTop/zoneBottom/zoneLeft/zoneRight 50/50 split
-// exactly, so "neutral" here always means the same boundary that split already establishes — full-
-// height (or full-width) edge slots with the button centered via justifyContent/alignItems land
-// exactly on that boundary without needing to compute or track a pixel coordinate for it directly.
-// Gated through needsSharedNeutralZone, not bare orientationMode === 'faceToFace' — solo/vsCpu play
-// still reports 'faceToFace' whenever the phone is just lying flat, and with only one real player
-// there's no far-side reader for the fixed default slot (edgeSlotHorizontal below) to be illegible
-// to, so it should stay put rather than jumping to the neutral midline (see LightCycles' MatchOverlays'
-// identical useCornerLayout gate for the same reasoning applied to its own corner-vs-neutral choice).
-// Each chip also rotates in place via the same getFixedZoneRotation signal LightCycles'/BoxHockey's
-// own chip buttons use, so it stays legible however the phone is physically being held.
-function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlayerCount }: GameActionChipsProps) {
+// Back/settings chips. Two structurally different layouts, not just two positions:
+//
+// Shared neutral zone (needsSharedNeutralZone — 2 human players, face-to-face): both players read
+// this same pair of chips from opposite sides of the device, so they sit on whichever dividing line
+// is actually live right now rather than a fixed corner — unlike LightCycles'/BoxHockey's boards
+// (always face-to-face, so the wall/midline is always horizontal), Snake's board genuinely supports
+// both face-to-face AND side-by-side (see TouchInputLayer.tsx/OnboardingOverlay.tsx's own zone
+// splits, both of which switch on the same live orientationMode) — but needsSharedNeutralZone is
+// only ever true for face-to-face (side-by-side already gives each seat its own dedicated half, see
+// its own doc), so the neutral line itself is always the horizontal seam OnboardingOverlay's
+// zoneTop/zoneBottom split already establishes; edgeSlotVertical (full height, fixed left/right edge,
+// vertically centered) lands exactly on it. Each chip only ever rotates its own glyph in place here
+// (getFixedZoneRotation, unlocked) — repositioning it under a live tilt would put it inside whichever
+// seat's zone is now upside-down to the OTHER seat instead of staying neutral, the same reason
+// BoxHockey's board-anchored buttons never move either.
+//
+// Corner layout (solo, vsCpu, or 2P side-by-side — no second seat's zone to protect): the same
+// top-left/top-right corners every other screen in the fleet uses (see index.tsx's trophy/settings
+// buttons), wrapped in FakeLandscapeView so the pair actually MOVES to wherever "top" visually is
+// right now — including a portrait upside-down hold, which the neutral branch's fixed-zone rotation
+// deliberately ignores — rather than just spinning in place while staying glued to the device's fixed
+// physical top edge. lockOrientation-aware, unlike the neutral branch: there's only one seat (or two
+// seats who already agree on which way is "up"), so freezing it in place while a match is in progress
+// is a real, sensible request in a way it isn't for the neutral branch's protected 2-seat zone.
+function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlayerCount, lockOrientation }: GameActionChipsProps) {
   const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
+  const { orientationMode: cornerOrientationMode, p1OnRight: cornerP1OnRight, upsideDown: cornerUpsideDown } = useOrientationState(lockOrientation)
   const insets = useSafeAreaInsets()
   const { dark } = useAutoPaperTheme()
   const fg = dark ? '#FFFFFF' : '#000000'
@@ -389,25 +401,45 @@ function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlay
 
   if (!showBack && !showSettings) return null
 
-  const rotation = getFixedZoneRotation(orientationMode, p1OnRight, upsideDown)
-  const chipRotation = rotation % 360 !== 0 ? { transform: [{ rotate: `${rotation}deg` }] } : undefined
   const neutral = needsSharedNeutralZone(orientationMode, humanPlayerCount)
-  const backSlot = neutral ? [styles.edgeSlotVertical, { left: insets.left }] : [styles.edgeSlotHorizontal, { top: insets.top }]
-  const settingsSlot = neutral ? [styles.edgeSlotVertical, { right: insets.right }] : [styles.edgeSlotHorizontal, { bottom: insets.bottom }]
+
+  if (neutral) {
+    const rotation = getFixedZoneRotation(orientationMode, p1OnRight, upsideDown)
+    const chipRotation = rotation % 360 !== 0 ? { transform: [{ rotate: `${rotation}deg` }] } : undefined
+    const backSlot = [styles.edgeSlotVertical, { left: insets.left }]
+    const settingsSlot = [styles.edgeSlotVertical, { right: insets.right }]
+    return (
+      <>
+        {showBack && (
+          <View style={backSlot}>
+            <IconButton icon='arrow-left' iconColor={fg} containerColor={chipBg} style={[styles.chipButton, chipRotation]} size={24} onPress={onBack} />
+          </View>
+        )}
+        {showSettings && (
+          <View style={settingsSlot}>
+            <IconButton icon='cog' iconColor={fg} containerColor={chipBg} style={[styles.chipButton, chipRotation]} size={24} onPress={onSettings} accessibilityLabel='Settings' />
+          </View>
+        )}
+      </>
+    )
+  }
+
+  const cornerRotation = getViewRotation(cornerOrientationMode, cornerP1OnRight, cornerUpsideDown)
+  const cornerInsets = rotateInsets(insets, cornerRotation)
 
   return (
-    <>
+    <FakeLandscapeView locked={lockOrientation} style={[StyleSheet.absoluteFill, styles.cornerChipsWrap]}>
       {showBack && (
-        <View style={backSlot}>
-          <IconButton icon='arrow-left' iconColor={fg} containerColor={chipBg} style={[styles.chipButton, chipRotation]} size={24} onPress={onBack} />
+        <View style={[styles.cornerSlot, { top: 8 + cornerInsets.top, left: 8 + cornerInsets.left }]}>
+          <IconButton icon='arrow-left' iconColor={fg} containerColor={chipBg} style={styles.chipButton} size={24} onPress={onBack} />
         </View>
       )}
       {showSettings && (
-        <View style={settingsSlot}>
-          <IconButton icon='cog' iconColor={fg} containerColor={chipBg} style={[styles.chipButton, chipRotation]} size={24} onPress={onSettings} accessibilityLabel='Settings' />
+        <View style={[styles.cornerSlot, { top: 8 + cornerInsets.top, right: 8 + cornerInsets.right }]}>
+          <IconButton icon='cog' iconColor={fg} containerColor={chipBg} style={styles.chipButton} size={24} onPress={onSettings} accessibilityLabel='Settings' />
         </View>
       )}
-    </>
+    </FakeLandscapeView>
   )
 }
 
@@ -416,10 +448,11 @@ const styles = StyleSheet.create({
   boardArea: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'absolute' },
   boardAreaFullBleed: { bottom: 0, left: 0, right: 0, top: 0 },
   chipButton: { margin: 0 },
-  // Side-by-side: full screen width at a fixed top/bottom edge, button centered horizontally via
-  // alignItems — lands exactly on the vertical 50/50 zone split (see OnboardingOverlay's own
-  // zoneLeft/zoneRight).
-  edgeSlotHorizontal: { alignItems: 'center', justifyContent: 'center', left: 0, position: 'absolute', right: 0 },
+  // box-none: this full-bleed wrapper only exists to give FakeLandscapeView something to rotate —
+  // it must never itself swallow the board's own touches in the (mostly empty) space between the
+  // two corner slots below.
+  cornerChipsWrap: { pointerEvents: 'box-none' },
+  cornerSlot: { position: 'absolute' },
   // Face-to-face: full screen height at a fixed left/right edge, button centered vertically via
   // justifyContent — lands exactly on the horizontal 50/50 zone split (see OnboardingOverlay's own
   // zoneTop/zoneBottom), the one strip of the board neither snake's own zone claims.

@@ -19,13 +19,17 @@ export interface GameOverDialogProps {
   // renders a win/loss/draw framing instead, still showing both scores.
   outcome?: GameOverOutcome | null
   opponentScore?: number
+  // Live physical-hold rotation (see @tastic/core's getViewRotation) — this is a single centered
+  // card with no per-seat zone to match (see this file's own header comment), so it just rotates its
+  // own content in place; defaults to 0 for call sites with no live orientation signal handy.
+  rotation?: number
 }
 
 // Styled after LightCycles' RoundOverDialog.tsx — specifically its single-human centered-card
 // branch (icon + text + buttons in one centered overlay card) — NOT its two-player per-seat split
 // branch: Snake's two-rival modes still only ever show one dialog to whoever is looking at the
 // device between passes, so there's no second physical viewer to rotate a second card for.
-export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHome, outcome, opponentScore }: GameOverDialogProps) {
+export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHome, outcome, opponentScore, rotation = 0 }: GameOverDialogProps) {
   const { colors, dark } = useAutoPaperTheme()
   const cardBg = dark ? '#111111' : '#F2F2F2'
   const cardBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
@@ -42,7 +46,7 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
 
   return (
     <View style={styles.overlay}>
-      <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+      <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }, rotation % 360 !== 0 && { transform: [{ rotate: `${rotation}deg` }] }]}>
         <Icon source={icon} size={64} color={color} />
         <Text variant='headlineLarge' style={[styles.title, { color }]}>
           {text}
