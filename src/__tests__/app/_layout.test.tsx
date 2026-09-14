@@ -1,22 +1,27 @@
-import { useUpdater } from '@rific/updater'
 import { render } from '@testing-library/react-native'
 import * as SplashScreen from 'expo-splash-screen'
 
 import RootLayout from '../../app/_layout'
+import { UpdateDialog } from '../../components/UpdateDialog'
 
 jest.mock('expo-router', () => ({
   Stack: Object.assign((props: any) => props.children, { Screen: () => null })
-}))
-
-jest.mock('@rific/updater', () => ({
-  useUpdater: jest.fn()
 }))
 
 jest.mock('../../components/Providers', () => ({
   Providers: (props: any) => props.children
 }))
 
-const mockUseUpdater = useUpdater as jest.Mock
+// UpdateDialog (@/components/UpdateDialog) is the fleet-shared @tastic/hud UpdateDialog's
+// onError -> toast bridge - it owns its own useUpdater() instance internally now, so RootLayout no
+// longer calls useUpdater() directly (it used to, before this app converged onto @tastic/hud's
+// UpdateDialog - see _layout.tsx's own comment on why). This just confirms RootLayout still mounts
+// it, without pulling in its own real @tastic/hud/@rific/toaster dependency chain.
+jest.mock('../../components/UpdateDialog', () => ({
+  UpdateDialog: jest.fn(() => null)
+}))
+
+const mockUpdateDialog = UpdateDialog as jest.Mock
 
 describe('RootLayout', () => {
   it('calls SplashScreen.preventAutoHideAsync on module load', () => {
@@ -31,8 +36,8 @@ describe('RootLayout', () => {
     await expect(render(<RootLayout />)).resolves.toBeDefined()
   })
 
-  it('calls useUpdater on render', async () => {
+  it('renders UpdateDialog', async () => {
     await render(<RootLayout />)
-    expect(mockUseUpdater).toHaveBeenCalled()
+    expect(mockUpdateDialog).toHaveBeenCalled()
   })
 })

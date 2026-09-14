@@ -1,10 +1,10 @@
-import { useUpdater } from '@rific/updater'
 import { OrientationProvider } from '@tastic/core'
 import { Stack } from 'expo-router'
 import { DeviceMotion } from 'expo-sensors'
 import * as SplashScreen from 'expo-splash-screen'
 
 import { Providers } from '@/components/Providers'
+import { UpdateDialog } from '@/components/UpdateDialog'
 import { GameStatsProvider } from '@/hooks/useGameStats'
 import { ProfilesProvider } from '@/hooks/useProfiles'
 
@@ -37,10 +37,16 @@ const RootNavigator = () => {
 }
 
 const RootLayout = () => {
-  useUpdater()
-
   return (
     <Providers>
+      {/* UpdateDialog is mounted here, as a sibling of OrientationProvider, so it sits inside
+      Providers' own <ToastProvider> tree (Providers.tsx renders <ToastProvider>{children}
+      <Toaster .../></ToastProvider>) and its onError -> toast wiring has a real useToast() context
+      to call into. It replaces the old bare useUpdater() call this function used to make directly
+      — that call had no UI of its own (useUpdater's default is a native Alert.alert prompt, a
+      hard no-op on web); this renders a themed ConfirmDialog instead, via @tastic/hud's own
+      UpdateDialog, which now owns the useUpdater() instance end to end. */}
+      <UpdateDialog />
       {/* Mounted once, here, above the navigator — not inside Providers.tsx itself. Providers.tsx
       is the generic, game-agnostic Expo-Starter provider stack (Redux/theme/feedback/scroll-view)
       that a future non-split-screen spinoff from the same starter would still want as-is;
