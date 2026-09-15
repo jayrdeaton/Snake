@@ -8,9 +8,20 @@ jest.mock('expo-router', () => ({
   Stack: Object.assign((props: any) => props.children, { Screen: () => null })
 }))
 
-jest.mock('../../components/Providers', () => ({
-  Providers: (props: any) => props.children
-}))
+// Providers itself is stripped down to just a real ReduxProvider — this suite is testing
+// RootLayout's own structure (SplashScreen calls, mounting UpdateDialog), not Providers'
+// internals (see components/Providers.test.tsx for that). A real Provider is needed here now that
+// ProfilesProvider (a RootLayout descendant, but outside Providers itself) reads/dispatches Redux
+// state via useSelector/useDispatch — the real `store` is fine to use as-is: no native module is
+// available under Jest, so ProfilesProvider's own shared-store reconciliation resolves against its
+// empty local fallback, not any real I/O.
+jest.mock('../../components/Providers', () => {
+  const { Provider: MockReduxProvider } = require('react-redux')
+  const { store: mockStore } = require('../../redux/store')
+  return {
+    Providers: (props: any) => <MockReduxProvider store={mockStore}>{props.children}</MockReduxProvider>
+  }
+})
 
 // UpdateDialog (@/components/UpdateDialog) is the fleet-shared @tastic/hud UpdateDialog's
 // onError -> toast bridge - it owns its own useUpdater() instance internally now, so RootLayout no

@@ -3,11 +3,14 @@ import { combineReducers, configureStore, type Middleware } from '@reduxjs/toolk
 import { createThemeReducer, getThirdColor } from '@rific/auto-paper'
 import { defaultSoundSettings, hapticReducer, soundReducer, type SoundSettings } from '@rific/feedback-press'
 import { scrollViewReducer } from '@rific/scroll-view'
+import { profilesReducer } from '@tastic/profile'
 import { FLUSH, PAUSE, PERSIST, persistReducer, persistStore, PURGE, REGISTER, REHYDRATE } from 'redux-persist'
 
 import { SNAKE_COLORS } from '@/utils/snakeEngine'
 
 import game from './gameSlice'
+import liveplay from './liveplaySlice'
+import profileSelection from './profileSelectionSlice'
 import settings from './settingsSlice'
 
 const hasError = (action: unknown): action is { error?: unknown } => typeof action === 'object' && action !== null && 'error' in action && Boolean(action.error)
@@ -42,12 +45,25 @@ const rootReducer = combineReducers({
   haptic: hapticReducer,
   sound: appSoundReducer,
   settings,
-  game
+  game,
+  // Transient per-round state, deliberately kept out of gameSlice — see liveplaySlice.ts's own doc
+  // for why, and persistConfig's blacklist below for how.
+  liveplay,
+  // The shared App Group roster (see @tastic/profile's resolveInitialProfiles/
+  // useSharedProfilesSync, wired in hooks/useProfiles.tsx) is layered on top of this as a separate
+  // sync target — this slice persisting normally via redux-persist, same as every other key here,
+  // is what gives it local-fallback behavior for the platforms/builds where the shared store isn't
+  // available, with no separate hand-rolled AsyncStorage path needed for that case.
+  profiles: profilesReducer,
+  profileSelection
 })
 
 const persistConfig = {
   key: 'root',
-  storage: AsyncStorage
+  storage: AsyncStorage,
+  // liveplay is the one slice that must never survive a rehydrate — see its own doc comment.
+  // Every other slice here is a genuine persisted preference/record.
+  blacklist: ['liveplay']
 }
 
 const persistedReducer = persistReducer(persistConfig, rootReducer)

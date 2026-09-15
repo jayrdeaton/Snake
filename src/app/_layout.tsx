@@ -1,7 +1,8 @@
-import { OrientationProvider } from '@tastic/core'
+import { getViewRotation, OrientationProvider, useOrientationState } from '@tastic/core'
 import { Stack } from 'expo-router'
 import { DeviceMotion } from 'expo-sensors'
 import * as SplashScreen from 'expo-splash-screen'
+import { StatusBar } from 'expo-status-bar'
 
 import { Providers } from '@/components/Providers'
 import { UpdateDialog } from '@/components/UpdateDialog'
@@ -10,6 +11,17 @@ import { ProfilesProvider } from '@/hooks/useProfiles'
 
 SplashScreen.preventAutoHideAsync()
 SplashScreen.setOptions({ duration: 500, fade: true })
+
+// Hides the OS status bar whenever content elsewhere is visually rotated (see @tastic/core's
+// getViewRotation/@tastic/split-screen's FakeLandscapeView) — matches BoxHockey's/LightCycles'/
+// AirHockey's identical RotationAwareStatusBar. /game additionally hides it unconditionally
+// regardless (see its own <StatusBar hidden />), so this only actually matters on /index,
+// /loadout, and /profiles.
+function RotationAwareStatusBar() {
+  const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
+  const rotation = getViewRotation(orientationMode, p1OnRight, upsideDown)
+  return <StatusBar hidden={rotation !== 0} />
+}
 
 const RootNavigator = () => {
   return (
@@ -73,6 +85,7 @@ const RootLayout = () => {
             <RootNavigator />
           </ProfilesProvider>
         </GameStatsProvider>
+        <RotationAwareStatusBar />
       </OrientationProvider>
     </Providers>
   )

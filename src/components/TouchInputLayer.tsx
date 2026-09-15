@@ -1,10 +1,12 @@
+import { useVibration } from '@rific/feedback-press'
 import { useOrientationState } from '@tastic/core'
-import { applyControlInversion } from '@tastic/input'
+import { applyControlInversion, isEffectiveTurn } from '@tastic/input'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { runOnJS, SharedValue, useSharedValue } from 'react-native-reanimated'
 
+import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { Direction, SnakeId } from '@/types'
 import { resolveTurnIntent } from '@/utils/turnIntent'
 
@@ -21,11 +23,15 @@ export interface TouchInputLayerProps {
   onActivate: (snakeId: SnakeId) => void
   // Whether each seat's own controls are currently Mesmerized (see types/index.ts's
   // SnakeControlEffect) — a mesmerized seat's resolved swipe direction is inverted before onTurn
-  // ever sees it, mirroring LightCycles' identical TouchInputLayer prop. Read through a ref (see
-  // controlInvertedRef below), never a gesture dependency, so a mid-touch mesmerize landing or
-  // expiring can never force RNGH to tear down and re-attach an in-progress gesture's native
-  // recognizer.
+  // ever sees it, mirroring LightCycles' identical TouchInputLayer prop. Read through latestRef
+  // (see below), never a gesture dependency, so a mid-touch mesmerize landing or expiring can
+  // never force RNGH to tear down and re-attach an in-progress gesture's native recognizer.
   controlInverted: Record<SnakeId, boolean>
+  // Each snake's current (committed) heading, straight from game state — used to gate the turn
+  // sound/haptic on isEffectiveTurn, so continuing straight or reversing 180° (both of which
+  // applySnakeTurnIntent silently no-ops in snakeEngine.ts) doesn't fire feedback for a turn that
+  // never actually happens. Mirrors LightCycles' identical TouchInputLayer prop exactly.
+  currentDirections: Record<SnakeId, Direction>
 }
 
 // Two independent single-finger Pan gestures in dual mode, each on its OWN View (sized/positioned
@@ -35,36 +41,39 @@ export interface TouchInputLayerProps {
 // single shared recognizer claims which pointer and lose one or both turns; two separate native
 // views/recognizers have nothing left to race, since each only ever sees the pointer that landed on
 // it. The board underneath still stays one undivided render — only touch handling is zoned.
-export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, controlInverted }: TouchInputLayerProps) {
+export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, controlInverted, currentDirections }: TouchInputLayerProps) {
   const solo = mode === 'solo'
   const { orientationMode, p1OnRight } = useOrientationState()
 
-  // Kept in a ref rather than closed over directly, so makeSnakeGesture (and the Gesture objects it
-  // builds) can stay referentially stable across renders — same rationale as LightCycles'
-  // TouchInputLayer.tsx: RNGH tears down and re-attaches its native recognizer on every new gesture
-  // object handed to GestureDetector, and a touch that starts mid-rebuild loses its recognizer
-  // state entirely. controlInverted rides the same ref-not-dependency treatment for the identical
-  // reason — a mesmerize landing or expiring mid-touch must never invalidate an in-progress gesture.
-  const onTurnRef = useRef(onTurn)
+  const { playTurn } = useSnakeSounds()
+  const { selection } = useVibration()
+
+  // Everything handleTurn/handleActivate need, kept in a ref rather than closed over directly, so
+  // those two callbacks — and therefore makeSnakeGesture and the Gesture objects it builds below —
+  // can stay referentially stable across renders, exactly mirroring LightCycles' identical
+  // TouchInputLayer.tsx latestRef: RNGH tears down and re-attaches its native recognizer on every
+  // new gesture object handed to GestureDetector, and a touch that starts mid-rebuild loses its
+  // recognizer state entirely. currentDirections in particular is a fresh object every single game
+  // tick (see game.tsx), so closing over it directly meant rebuilding every Gesture.Pan()/
+  // Gesture.Tap() several times a second during play.
+  const latestRef = useRef({ onTurn, onActivate, controlInverted, currentDirections, playTurn, selection })
   useEffect(() => {
-    onTurnRef.current = onTurn
-  })
-  const onActivateRef = useRef(onActivate)
-  useEffect(() => {
-    onActivateRef.current = onActivate
-  })
-  const controlInvertedRef = useRef(controlInverted)
-  useEffect(() => {
-    controlInvertedRef.current = controlInverted
+    latestRef.current = { onTurn, onActivate, controlInverted, currentDirections, playTurn, selection }
   })
 
   const handleTurn = useCallback((snakeId: SnakeId, direction: Direction) => {
-    const inverted = controlInvertedRef.current[snakeId]
-    onTurnRef.current(snakeId, inverted ? applyControlInversion(direction, true) : direction)
+    const { onTurn, controlInverted, currentDirections, playTurn, selection } = latestRef.current
+    const invertedDirection = applyControlInversion(direction, controlInverted[snakeId])
+    onTurn(snakeId, invertedDirection)
+    if (isEffectiveTurn(invertedDirection, currentDirections[snakeId])) {
+      playTurn()
+      selection()
+    }
   }, [])
 
   const handleActivate = useCallback((snakeId: SnakeId) => {
-    onActivateRef.current(snakeId)
+    const { onActivate } = latestRef.current
+    onActivate(snakeId)
   }, [])
 
   // Per-snake drag state, read/written from the UI-thread gesture worklets below (never touched

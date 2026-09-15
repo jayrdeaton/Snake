@@ -94,7 +94,7 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
         authored lands nearest a thumb reaching up from the bottom of the screen — same ordering
         rationale as RoundOverDialog's own Quit-before-Rematch pair. */}
         <Button mode='contained' onPress={onHome} style={styles.button} buttonColor={homeBg} textColor={homeFg}>
-          Home
+          Loadout
         </Button>
         <Button mode='contained' onPress={onRetry} style={styles.button} buttonColor={colors.primary} textColor={colors.onPrimary}>
           Retry

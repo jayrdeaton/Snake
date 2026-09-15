@@ -1,12 +1,15 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { IconButton, useVibration } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
-import { computeContentBounds, getFixedZoneRotation, getViewRotation, rotateInsets, useOrientationState, useSettledWindowDimensions } from '@tastic/core'
+import { computeContentBounds, FakeLandscapeView, getFixedZoneRotation, getViewRotation, rotateInsets, useOrientationState, useSettledWindowDimensions } from '@tastic/core'
 import { computeGridSize } from '@tastic/grid'
-import { FakeLandscapeView, needsSharedNeutralZone } from '@tastic/split-screen'
-import { router, useLocalSearchParams } from 'expo-router'
+import { ConfirmDialog } from '@tastic/hud'
+import { needsSharedNeutralZone } from '@tastic/split-screen'
+import { useLocalSearchParams } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
+import { Text } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useDispatch, useSelector } from 'react-redux'
 
@@ -24,8 +27,10 @@ import { useProfiles } from '@/hooks/useProfiles'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { SnakeMode, useSnakeState } from '@/hooks/useSnakeState'
 import { gameActions } from '@/redux/gameSlice'
+import { liveplayActions } from '@/redux/liveplaySlice'
 import type { RootState } from '@/redux/store'
 import { Direction, GamePhase, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
+import { safeBack } from '@/utils/navigation'
 
 // A stable, referentially-constant all-zero insets object — see safeAreaInsetsPx's own comment
 // below for why this is passed instead of the device's real insets whenever the board isn't
@@ -118,9 +123,20 @@ export default function GameScreen() {
     setLocalPhase('onboarding')
   }, [retry])
 
-  const handleHome = useCallback(() => {
-    router.replace('/')
-  }, [])
+  // Each seat's current (committed) heading, straight from game state — passed down to both
+  // TouchInputLayer and KeyboardInputLayer so each can gate its own turn sound/haptic on
+  // isEffectiveTurn, mirroring LightCycles' identical currentDirections memo (and identical prop on
+  // its own TouchInputLayer/TouchInputLayer.web) in its own game.tsx exactly — the feedback itself
+  // lives in the input layers there too, not here. 'up' is an arbitrary placeholder for a seat that
+  // doesn't exist yet (solo's snake 2); neither input layer ever actually looks it up for a seat no
+  // zone/key scheme is wired to.
+  const currentDirections: Record<SnakeId, Direction> = useMemo(
+    () => ({
+      1: state.snakes.find((s) => s.id === 1)?.direction ?? 'up',
+      2: state.snakes.find((s) => s.id === 2)?.direction ?? 'up'
+    }),
+    [state.snakes]
+  )
 
   // Vs CPU: only the near/bottom zone (snake 1, the human) is ever wired to actually turn a
   // snake here — the far/top zone still renders (TouchInputLayer's 'dual' mode always mounts both
@@ -195,6 +211,19 @@ export default function GameScreen() {
   // convention and snakeAi.ts's CPU_SNAKE_ID for why seat 2 is always the non-primary one.
   const humanScore = state.snakes[0]?.score ?? 0
   const opponentScore = state.snakes[1]?.score
+
+  // Mirrors BoxHockey's/AirHockey's/Pong's/LightCycles' identical onBackPress + ConfirmDialog
+  // pair (rendered near SettingsDialog below): only interrupts with a "Quit Match?" confirmation
+  // when there's an actual score to lose, so backing out of a still-scoreless round (onboarding,
+  // or a round that ended 0-0) exits immediately instead of confirming nothing. Previously this
+  // screen had no confirmation at all — its back button only ever showed during onboarding, where
+  // this same zero-score case already made it a no-op.
+  const [confirmBackVisible, setConfirmBackVisible] = useState(false)
+  const onBackPress = useCallback(() => {
+    if (humanScore > 0 || (opponentScore ?? 0) > 0) setConfirmBackVisible(true)
+    else safeBack()
+  }, [humanScore, opponentScore])
+
   // What actually gets persisted as "the" high score for this mode: Solo/Vs CPU track snake 1's
   // own score only (a strong CPU run in Vs CPU shouldn't inflate "your" high score); 2 Player
   // tracks whichever of the two human seats actually scored higher this round, since both are
@@ -280,6 +309,23 @@ export default function GameScreen() {
   // fade takes longer, rather than revealing the dialog over a still-fading loser.
   const [showGameOverDialog, setShowGameOverDialog] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Same condition GameActionChips' own showBack/showSettings use below.
+  const controlsVisible = phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)
+
+  // Mirrors phase === 'playing' into Redux (liveplaySlice — see its own doc) rather than calling
+  // @tastic/edge-guard's useEdgeGestureGuard directly here: that hook stays mounted once at the app
+  // root (Providers.tsx's EdgeGuardBridge), same as every other cross-cutting settings bridge in
+  // this app (FeedbackBridge, ScrollViewBridge) — this just reports the one signal that bridge has
+  // no other way to read. Reset to false on unmount too, so leaving this screen mid-round by any
+  // path (not just the in-app back button) can't leave Edge Guard stuck on.
+  useEffect(() => {
+    dispatch(liveplayActions.setActivelyPlaying(phase === 'playing'))
+    return () => {
+      dispatch(liveplayActions.setActivelyPlaying(false))
+    }
+  }, [phase, dispatch])
+
   // SettingsDialog and GameOverDialog are both a single centered card with no second seat's zone to
   // stay neutral for (see each one's own doc) — getViewRotation, not getFixedZoneRotation, so a
   // portrait upside-down hold repositions/flips them too instead of being silently ignored, same as
@@ -304,6 +350,7 @@ export default function GameScreen() {
 
   const { dark } = useAutoPaperTheme()
   const bg = dark ? '#000000' : '#FFFFFF'
+  const fgMuted = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'
 
   // state.grid is already the round's own frozen design resolution — createInitialSnakeState only
   // ever runs again on retry (see useSnakeState.ts), so every snake body/food coordinate laid down
@@ -334,6 +381,11 @@ export default function GameScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: bg }]}>
+      {/* Hidden only here, not on /loadout or the title screen — matches BoxHockey's/LightCycles'/
+      AirHockey's identical per-screen override. Unconditional: hidden for the whole time a round
+      is in progress, for full-screen immersion during actual play. Reverts to whatever
+      _layout.tsx's own RotationAwareStatusBar says the instant this screen unmounts. */}
+      <StatusBar hidden />
       {/* Explicit top/bottom/left/right edges from insets (not a flex-centered shrink within a
       full-bleed parent) so an asymmetric inset — a landscape notch/Dynamic Island sitting on just
       one side, for instance — still produces a genuinely safe rectangle instead of one that's
@@ -343,21 +395,52 @@ export default function GameScreen() {
       <View style={[styles.boardArea, fullScreen ? styles.boardAreaFullBleed : { top: insets.top, bottom: insets.bottom, left: insets.left + gutterWidth, right: insets.right + gutterWidth }]}>
         <View style={{ width: designWidth, height: designHeight, transform: [{ scale: boardScale }] }}>
           <SnakeBoard snakes={state.snakes} food={state.food} obstacles={state.obstacles} portals={state.portals} tunnels={state.tunnels} pickups={state.pickups} phase={state.phase} cellPx={cellPx} grid={state.grid} tick={state.tick} tickIntervalMs={tickIntervalMs} wrapEdges={wrapEdges} onboarding={phase === 'onboarding'} />
-          <TouchInputLayer mode={touchMode} enabled={phase === 'playing'} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} />
+          <TouchInputLayer mode={touchMode} enabled={phase === 'playing'} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} currentDirections={currentDirections} />
           {enabledPowerups.length > 0 && <SnakePowerupHud snakes={state.snakes} />}
         </View>
       </View>
-      <KeyboardInputLayer enabled={phase === 'playing'} humanPlayers={humanPlayers} controlScheme={controlScheme} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} />
+      <KeyboardInputLayer enabled={phase === 'playing'} humanPlayers={humanPlayers} controlScheme={controlScheme} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} currentDirections={currentDirections} />
 
       {phase === 'onboarding' && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} lockOrientation={lockOrientation} />}
 
-      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(highScores[mode], recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={handleHome} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} rotation={overlayRotation} />}
+      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(highScores[mode], recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} rotation={overlayRotation} />}
 
       {/* Kept as its own sibling of the board/gesture tree above, mirroring LightCycles'/BoxHockey's
       identically-motivated MatchOverlays split — this live tilt subscription's re-renders should
-      never cascade into the board/touch-input subtree. */}
-      <GameActionChips showBack={phase === 'onboarding'} showSettings={phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)} onBack={() => router.back()} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} lockOrientation={lockOrientation} />
+      never cascade into the board/touch-input subtree. showBack now matches showSettings' own
+      gameOver gating (previously back-only during onboarding) — matches BoxHockey's/AirHockey's/
+      Pong's identical always-available back button, so there's a consistent way out of a finished
+      round beyond GameOverDialog's own Home button. */}
+      <GameActionChips showBack={controlsVisible} showSettings={controlsVisible} onBack={onBackPress} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} lockOrientation={lockOrientation} />
       <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={overlayRotation} />
+
+      {/* Fleet-shared @tastic/hud ConfirmDialog, matching BoxHockey's/AirHockey's/LightCycles'/
+      Pong's identical "Quit Match?" prompt — see onBackPress's own comment above for why it's
+      gated on there being an actual score to lose. Solo gets its own score-only message (no
+      opponent to show a "–" pairing against); vsCpu/twoPlayer show both scores in each snake's own
+      color, same colored-segment convention the other apps use. */}
+      <ConfirmDialog
+        visible={confirmBackVisible}
+        title='Quit Match?'
+        message={
+          mode === 'solo' ? (
+            <Text style={{ color: state.snakes[0]?.color ?? fgMuted }}>Score: {humanScore}</Text>
+          ) : (
+            <>
+              <Text style={{ color: state.snakes[0]?.color ?? fgMuted }}>{humanScore}</Text>
+              <Text style={{ color: fgMuted }}> – </Text>
+              <Text style={{ color: state.snakes[1]?.color ?? fgMuted }}>{opponentScore ?? 0}</Text>
+            </>
+          )
+        }
+        confirmLabel='Quit'
+        cancelLabel='Cancel'
+        icon='alert-circle-outline'
+        destructive={false}
+        onConfirm={safeBack}
+        onCancel={() => setConfirmBackVisible(false)}
+        rotation={overlayRotation}
+      />
     </View>
   )
 }

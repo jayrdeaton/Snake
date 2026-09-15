@@ -43,15 +43,16 @@ const FeedbackBridge = ({ children }: ProvidersProps) => {
   )
 }
 
-// Drives @tastic/edge-guard's native UserDefaults mirror on every change — including the initial
-// redux-persist rehydration, since PersistGate below already gates children until that resolves —
-// as AsyncStorage-backed Redux state and UserDefaults (what the guard's native swizzle reads) are
-// otherwise two independent stores that only this keeps in sync. Mirrors LightCycles'
-// useGameSettings.tsx's own call site of this hook, just sourced from Redux instead of that app's
-// separate AsyncStorage-backed settings context.
+// Mounted once, permanently, same as FeedbackBridge/ScrollViewBridge below — not scoped to the
+// game screen. deferBottomEdgeGestures (gameSlice) is the persisted user preference; activelyPlaying
+// (liveplaySlice, deliberately blacklisted from redux-persist — see that slice's own doc) is
+// game.tsx's own report of whether a round is actually in progress right now. Combining both here,
+// in the one place @tastic/edge-guard's hook is ever called, is what keeps Edge Guard both a real
+// opt-in AND scoped to actual gameplay, without needing the hook itself mounted/unmounted per screen.
 const EdgeGuardBridge = ({ children }: ProvidersProps) => {
   const deferBottomEdgeGestures = useSelector((state: RootState) => state.game.deferBottomEdgeGestures)
-  useEdgeGestureGuard(deferBottomEdgeGestures)
+  const activelyPlaying = useSelector((state: RootState) => state.liveplay.activelyPlaying)
+  useEdgeGestureGuard(deferBottomEdgeGestures && activelyPlaying)
   return <>{children}</>
 }
 

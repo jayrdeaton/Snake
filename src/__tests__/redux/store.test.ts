@@ -48,6 +48,14 @@ describe('store', () => {
     it('initializes settings defaults', () => {
       expect(store.getState().settings.debug).toBe(false)
     })
+
+    it('initializes profiles defaults', () => {
+      expect(store.getState().profiles).toEqual([])
+    })
+
+    it('initializes profileSelection defaults', () => {
+      expect(store.getState().profileSelection).toEqual({ 1: null, 2: null })
+    })
   })
 
   describe('persistor', () => {

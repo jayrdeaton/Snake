@@ -1,7 +1,9 @@
-import { applyControlInversion } from '@tastic/input'
+import { useVibration } from '@rific/feedback-press'
+import { applyControlInversion, isEffectiveTurn } from '@tastic/input'
 import { useEffect } from 'react'
 import { Platform } from 'react-native'
 
+import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { ControlScheme, Direction, SnakeId } from '@/types'
 import { resolveControlSchemeActivate, resolveControlSchemeDirection } from '@/utils/keyboardControls'
 
@@ -17,6 +19,12 @@ export interface KeyboardInputLayerProps {
   // SnakeControlEffect) — a mesmerized seat's resolved key direction is inverted before onTurn ever
   // sees it, mirroring TouchInputLayer.tsx's identical prop.
   controlInverted: Record<SnakeId, boolean>
+  // Each snake's current (committed) heading, straight from game state — used to gate the turn
+  // sound/haptic on isEffectiveTurn, so continuing straight or reversing 180° (both of which
+  // applySnakeTurnIntent silently no-ops in snakeEngine.ts) doesn't fire feedback for a turn that
+  // never actually happens. Mirrors LightCycles' TouchInputLayer.web.tsx's identical prop and its
+  // own keydown listener's identical isEffectiveTurn check below.
+  currentDirections: Record<SnakeId, Direction>
 }
 
 // Web-only, and purely additive on top of TouchInputLayer's own always-on swipe zones (which
@@ -34,7 +42,10 @@ export interface KeyboardInputLayerProps {
 // in Safari, say) can still have a physical keyboard attached, so the listener itself stays live
 // regardless — exactly mirroring LightCycles' TouchInputLayer.web.tsx, which carries no touch-primary
 // check of its own either.
-export default function KeyboardInputLayer({ enabled, humanPlayers, controlScheme, onTurn, onActivate, controlInverted }: KeyboardInputLayerProps) {
+export default function KeyboardInputLayer({ enabled, humanPlayers, controlScheme, onTurn, onActivate, controlInverted, currentDirections }: KeyboardInputLayerProps) {
+  const { playTurn } = useSnakeSounds()
+  const { selection } = useVibration()
+
   useEffect(() => {
     if (!enabled || Platform.OS !== 'web') return
 
@@ -48,14 +59,19 @@ export default function KeyboardInputLayer({ enabled, humanPlayers, controlSchem
         const direction = resolveControlSchemeDirection(e, controlScheme[snakeId])
         if (!direction) continue
         e.preventDefault()
-        onTurn(snakeId, controlInverted[snakeId] ? applyControlInversion(direction, true) : direction)
+        const invertedDirection = applyControlInversion(direction, controlInverted[snakeId])
+        onTurn(snakeId, invertedDirection)
+        if (isEffectiveTurn(invertedDirection, currentDirections[snakeId])) {
+          playTurn()
+          selection()
+        }
         return
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [enabled, humanPlayers, controlScheme, onTurn, onActivate, controlInverted])
+  }, [enabled, humanPlayers, controlScheme, onTurn, onActivate, controlInverted, currentDirections, playTurn, selection])
 
   return null
 }
