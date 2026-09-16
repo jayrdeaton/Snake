@@ -1333,14 +1333,14 @@ function Pickups({ pickups, cellPx, phase, color }: { pickups: SnakePowerupPicku
   )
 }
 
-// The board's own accent color for food — distinct from either snake's own color, same role
-// LightCycles' GameBoard.tsx gives its `pickupColor` prop (there, the app theme's tertiary; here,
-// the theme's primary reads as the more natural "accent" role since tertiary is already spoken for
-// by every snake's own centerline accent — see SnakeBody above). Obstacles/tunnels share the theme's outline
-// role (a neutral, structural tone — distinguished from each other by shape, not color); portals
-// and pickups each get their own distinct accent (secondaryContainer, secondary) so all four board
-// features stay visually distinguishable from one another and from food/snakes. First-pass color
-// choices — verify visually against the app's actual light/dark palettes.
+// The board's own accent color for food — theme primary/secondary are now live P1/P2 seat colors
+// (see loadout.tsx's own theme-bridge effect), so food reads through tertiary instead: the same
+// third color, maximally distinct from both seats', that every snake's own centerline accent below
+// already uses (see SnakeBody) — a neutral role, not either player's own. Obstacles/tunnels share
+// the theme's outline role (a neutral, structural tone — distinguished from each other by shape, not
+// color); portals and pickups each get their own distinct accent (secondaryContainer, secondary) so
+// all four board features stay visually distinguishable from one another and from food/snakes.
+// First-pass color choices — verify visually against the app's actual light/dark palettes.
 export function SnakeBoard({ snakes, food, obstacles, portals, tunnels, pickups, phase, cellPx, grid, tick, tickIntervalMs, wrapEdges, onboarding }: SnakeBoardProps) {
   const { colors } = useAutoPaperTheme()
   const phaseDriver = useContinuousPhase()
@@ -1351,7 +1351,7 @@ export function SnakeBoard({ snakes, food, obstacles, portals, tunnels, pickups,
       <Obstacles obstacles={obstacles} cellPx={cellPx} color={colors.outline} />
       <Tunnels tunnels={tunnels} cellPx={cellPx} color={colors.outline} />
       <Portals portals={portals} cellPx={cellPx} color={colors.secondaryContainer} />
-      <FoodDot food={food} cellPx={cellPx} phase={phaseDriver} color={colors.primary} />
+      <FoodDot food={food} cellPx={cellPx} phase={phaseDriver} color={colors.tertiary} />
       <Pickups pickups={pickups} cellPx={cellPx} phase={phaseDriver} color={colors.secondary} />
       {snakes.map((snake) => (
         <SnakeBody key={snake.id} snake={snake} cellPx={cellPx} phase={phaseDriver} tertiaryColor={colors.tertiary} surfaceColor={colors.surface} tick={tick} tickIntervalMs={tickIntervalMs} grid={grid} />

@@ -46,10 +46,10 @@ describe('app/index', () => {
   })
 
   it('renders exactly the 1 Player / 2 Player buttons, with no stats', async () => {
-    const { getByText, queryByText } = await renderIndex({ ...defaultGameState, highScore: { solo: 12, vsCpu: 7, twoPlayer: 3 } })
+    const { getByText, queryByText } = await renderIndex()
     expect(getByText('1 Player')).toBeTruthy()
     expect(getByText('2 Player')).toBeTruthy()
-    // No per-mode high-score stats anymore — that's moving to a future achievements screen.
+    // No per-mode high-score stats on this screen — those live on the achievements screen instead.
     expect(queryByText('12')).toBeNull()
     expect(queryByText('Vs CPU')).toBeNull()
   })

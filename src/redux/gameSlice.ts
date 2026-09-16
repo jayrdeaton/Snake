@@ -7,11 +7,6 @@ import { SNAKE_COLORS } from '@/utils/snakeEngine'
 export type CpuDifficulty = 'easy' | 'normal' | 'hard'
 
 export type GameSliceState = {
-  highScore: {
-    solo: number
-    vsCpu: number
-    twoPlayer: number
-  }
   wrapEdges: boolean
   // Caps the board's own width via @tastic/core's computeContentBounds (see game.tsx and
   // constants/snake.ts's MAX_BOARD_CONTENT_WIDTH) on a wide desktop-web window, AND keeps the board
@@ -83,7 +78,6 @@ export type GameSliceState = {
 }
 
 export const defaultGameState: GameSliceState = {
-  highScore: { solo: 0, vsCpu: 0, twoPlayer: 0 },
   wrapEdges: false,
   fullScreen: false,
   cpuDifficulty: null,
@@ -102,13 +96,6 @@ const slice = createSlice({
   name: 'game',
   initialState: defaultGameState,
   reducers: {
-    setHighScore: (state, action: PayloadAction<{ mode: keyof GameSliceState['highScore']; score: number }>) => ({
-      ...state,
-      highScore: {
-        ...state.highScore,
-        [action.payload.mode]: Math.max(state.highScore[action.payload.mode], action.payload.score)
-      }
-    }),
     setWrapEdges: (state, action: PayloadAction<boolean>) => ({ ...state, wrapEdges: action.payload }),
     setFullScreen: (state, action: PayloadAction<boolean>) => ({ ...state, fullScreen: action.payload }),
     setCpuDifficulty: (state, action: PayloadAction<CpuDifficulty>) => ({ ...state, cpuDifficulty: action.payload }),
@@ -127,12 +114,6 @@ const slice = createSlice({
     setArenaVariant: (state, action: PayloadAction<SnakeArenaVariant>) => ({ ...state, arenaVariant: action.payload }),
     setEnabledPowerups: (state, action: PayloadAction<SnakePowerupType[]>) => ({ ...state, enabledPowerups: action.payload }),
     setGridSizeTier: (state, action: PayloadAction<SnakeGridSizeTier>) => ({ ...state, gridSizeTier: action.payload }),
-    // Scoped to just the high-score record — unlike resetGameState below, this doesn't touch
-    // wrapEdges/fullScreen/cpuDifficulty/lockOrientation/deferBottomEdgeGestures/lastGuestColor/
-    // lastCpuColor/controlScheme/speedTier/arenaVariant/enabledPowerups/gridSizeTier, since
-    // achievements.tsx's own "Reset All Stats" action should only erase tracked stats, not silently
-    // revert every other persisted preference along with them.
-    resetHighScore: (state) => ({ ...state, highScore: defaultGameState.highScore }),
     resetGameState: () => defaultGameState
   },
   // redux-persist's own autoMergeLevel1 (store.ts's persistConfig has no stateReconciler override,

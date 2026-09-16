@@ -8,14 +8,11 @@ import { useMemo, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Text } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useDispatch, useSelector } from 'react-redux'
 
 import { ACHIEVEMENT_CATALOG } from '@/constants/achievements'
 import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
 import { SnakeMode } from '@/hooks/useSnakeState'
-import { gameActions } from '@/redux/gameSlice'
-import type { RootState } from '@/redux/store'
 import { getBestScoreAnyMode, getProfileRankings, getProfileStatsView, getTotalPlayed, getTotalScore, ProfileRanking } from '@/utils/statsEngine'
 import { DEFAULT_PROFILE_STATS, SNAKE_MODES } from '@/utils/statsValidation'
 
@@ -87,16 +84,6 @@ export default function AchievementsScreen() {
   // for "All Profiles", so every section collapses to the device-wide view in that case.
   const statsView = profileBucket ? getProfileStatsView(profileBucket) : stats
   const rankings = useMemo(() => getProfileRankings(profiles, stats.profiles), [profiles, stats.profiles])
-  // The redux-persist high score still drives the in-round "new high score" banner (see game.tsx),
-  // so resetting stats here clears it too — otherwise the banner would keep comparing against a
-  // score the stats screen no longer shows.
-  const highScore = useSelector((state: RootState) => state.game.highScore)
-  const dispatch = useDispatch()
-
-  const handleReset = () => {
-    resetAll()
-    dispatch(gameActions.resetHighScore())
-  }
 
   // Every hook above runs unconditionally on every render, so this guard sits here rather than as
   // an early return up top — avoids a flash of zeroed stats (0 rounds played, no achievements
@@ -107,7 +94,7 @@ export default function AchievementsScreen() {
 
   return (
     <FakeLandscapeView style={styles.rotatable}>
-      <BaseStatsScreen onBack={() => router.back()} insets={insets} onReset={handleReset} resetConfirmBody='This permanently erases every high score, stat and achievement. This cannot be undone.' rotation={rotation}>
+      <BaseStatsScreen onBack={() => router.back()} insets={insets} onReset={resetAll} resetConfirmBody='This permanently erases every high score, stat and achievement. This cannot be undone.' rotation={rotation}>
         {profiles.length > 0 && <ProfilePicker idPrefix='achievements' host={profilePickerHost} profiles={profiles} selectedId={effectiveProfileId} color={themeColors.primary} dark={dark} guestLabel='All Profiles' nullLabel='All Profiles' nullIcon='account-group' onSelect={(profile) => setSelectedProfileId(profile?.id ?? null)} />}
 
         <StatSection label='OVERALL'>
@@ -123,11 +110,9 @@ export default function AchievementsScreen() {
           <StatRow label='Best Streak' value={String(statsView.versusStreak.bestWinStreak)} />
         </StatSection>
 
-        {/* High score comes from the redux-persist store, which predates this screen and still feeds
-      the in-round banner; everything else on this row is from the stats blob. */}
         {SNAKE_MODES.map((mode) => (
           <StatSection key={mode} label={MODE_LABELS[mode].toUpperCase()}>
-            <StatRow label='High Score' value={String(highScore[mode])} />
+            <StatRow label='High Score' value={String(statsView.byMode[mode].bestScore)} />
             <StatRow label='Rounds' value={String(statsView.byMode[mode].played)} />
             <StatRow label='Total Score' value={String(statsView.byMode[mode].totalScore)} />
           </StatSection>

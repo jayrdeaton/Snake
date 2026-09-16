@@ -122,6 +122,17 @@ describe('profiles', () => {
     s = play(s, round({ score: 25 }), { ...CTX, profileIds: ['alice'] })
     expect(s.profiles.alice.byMode.solo).toEqual({ played: 2, bestScore: 25, totalScore: 35 })
   })
+
+  // Regression coverage for the game-over dialog bug: two profiles playing solo on separate turns
+  // must never see each other's best, even though both rounds bump the same device-wide top-level
+  // bucket (the honest fallback for guest play — see game.tsx's own viewerStats).
+  it('keeps one profile solo run from leaking into a different profile own best', () => {
+    let s = play(DEFAULT_STATS, round({ score: 50 }), { ...CTX, profileIds: ['alice'] })
+    s = play(s, round({ score: 5 }), { ...CTX, profileIds: ['bob'] })
+    expect(s.profiles.alice.byMode.solo.bestScore).toBe(50)
+    expect(s.profiles.bob.byMode.solo.bestScore).toBe(5)
+    expect(s.byMode.solo.bestScore).toBe(50)
+  })
 })
 
 describe('day streak', () => {

@@ -1,4 +1,4 @@
-import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
+import { defaultColors, getThirdColor, useAutoPaperTheme, useThemeSettings } from '@rific/auto-paper'
 import { FakeLandscapeView, getViewRotation, rotateInsets, useOrientationState } from '@tastic/core'
 import { CornerActionButtons, LabeledDropdownOption, MenuOption, PressAwayOverlay, ReadyButton, SharedActionBand, usePopoverHost } from '@tastic/hud'
 import { DualZoneLayout, needsSharedNeutralZone, useDualZoneLayout } from '@tastic/split-screen'
@@ -116,6 +116,7 @@ export default function LoadoutScreen() {
   const rotation = getViewRotation(panelLayout.orientationMode, panelLayout.p1OnRight, panelLayout.upsideDown)
   const insets = rotateInsets(useSafeAreaInsets(), rotation)
   const { colors: themeColors, dark } = useAutoPaperTheme()
+  const { set: setThemeSettings } = useThemeSettings()
   const { profiles, lastSelected, selectProfile } = useProfiles()
   const dispatch = useDispatch()
   const lastGuestColor = useSelector((state: RootState) => state.game.lastGuestColor)
@@ -270,6 +271,17 @@ export default function LoadoutScreen() {
     },
     [p1Color, p2Color, p2Exists, persistP1Color, persistP2Color]
   )
+
+  // The app-wide theme follows whichever colors are actually live here — primary is always P1's,
+  // secondary is P2's (human or CPU, whichever seat 2 currently is), tertiary the third color
+  // maximally distinct from both, so a board/HUD element that wants a neutral accent never clashes
+  // with either seat. Goes through auto-paper's own live settings setter (not a direct Redux
+  // dispatch) since Theme.tsx's `initialValue` only ever seeds the Provider once, at mount — `set`
+  // is what actually re-renders the running theme; Theme.tsx's existing onChange then mirrors this
+  // out to Redux for us, so it still persists across a relaunch with no extra wiring here.
+  useEffect(() => {
+    setThemeSettings({ color: { primary: p1Color, secondary: p2Color, tertiary: getThirdColor(p1Color, p2Color) } })
+  }, [p1Color, p2Color, setThemeSettings])
 
   // Covers every genuine gameplay variant LoadoutSharedControls exposes — wrapEdges (a coin flip,
   // same as before), arenaVariant/gridSizeTier (a random pick off the same option list each picker

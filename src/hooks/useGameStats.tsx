@@ -6,10 +6,9 @@ import { AchievementDefinition, StatsState, UnlockedAchievementsState } from '@/
 import { applyRoundOutcome, getProfileStatsView, RoundContext, RoundOutcome } from '@/utils/statsEngine'
 import { DEFAULT_STATS, isValidStats } from '@/utils/statsValidation'
 
-// Produces 'snake.stats' and 'snake.achievements'. Deliberately separate from redux-persist's own
-// store (see redux/store.ts): the per-mode `highScore` there still drives the in-round "new high
-// score" banner and is left exactly as it was, while everything achievement-facing lives here.
-// The two are written at the same moment from the same round, so they can't drift.
+// Produces 'snake.stats' and 'snake.achievements' — the single source of truth for both the
+// achievements screen and the in-round "new high score" banner (see game.tsx's own viewerStats),
+// profile-scoped via `stats.profiles[id]` wherever a specific profile is active.
 const STORAGE_NAMESPACE = 'snake'
 
 interface GameStatsContextValue {

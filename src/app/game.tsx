@@ -26,11 +26,11 @@ import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { SnakeMode, useSnakeState } from '@/hooks/useSnakeState'
-import { gameActions } from '@/redux/gameSlice'
 import { liveplayActions } from '@/redux/liveplaySlice'
 import type { RootState } from '@/redux/store'
 import { Direction, GamePhase, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
 import { safeBack } from '@/utils/navigation'
+import { DEFAULT_PROFILE_STATS } from '@/utils/statsValidation'
 
 // A stable, referentially-constant all-zero insets object — see safeAreaInsetsPx's own comment
 // below for why this is passed instead of the device's real insets whenever the board isn't
@@ -83,10 +83,9 @@ export default function GameScreen() {
   // useSnakeState/recordRoundOutcome away from ever actually reading this value.
   const cpuDifficulty = useSelector((state: RootState) => state.game.cpuDifficulty) ?? 'normal'
   const controlScheme = useSelector((state: RootState) => state.game.controlScheme)
-  const { recordRoundOutcome } = useGameStats()
+  const { recordRoundOutcome, stats } = useGameStats()
   const { lastSelected } = useProfiles()
   const { success: showAchievementToast } = useToast()
-  const highScores = useSelector((state: RootState) => state.game.highScore)
   const dispatch = useDispatch()
 
   // Bundled once via useMemo — see types/index.ts's own SnakeRoundSettings comment for why this is
@@ -230,6 +229,13 @@ export default function GameScreen() {
   // equally "you" on a shared local device.
   const recordedScore = useMemo(() => (mode === 'twoPlayer' ? Math.max(humanScore, opponentScore ?? 0) : humanScore), [mode, humanScore, opponentScore])
 
+  // Snake 1's own profile-scoped stats bucket — GameOverDialog's "BEST" is always from this same
+  // single viewer's perspective (see that file's header comment), so the number it beats should be
+  // whichever profile actually sits in that seat, not a device-wide figure every profile shares.
+  // Falls back to the device-wide bucket for guest play (no profile selected in seat 1), mirroring
+  // how @tastic/achievements' own device-vs-profile scope split works.
+  const viewerStats = lastSelected[1] ? (stats.profiles[lastSelected[1]] ?? DEFAULT_PROFILE_STATS) : stats
+
   // GameOverDialog wants a win/loss/draw framing from snake 1's own perspective ('YOU'/'OPPONENT'
   // in its own copy — see that file's header comment on why there's no per-seat split even in
   // 2 Player), not the engine's own {type,winnerId} RoundOutcome shape. Solo has no outcome at
@@ -240,13 +246,13 @@ export default function GameScreen() {
     return state.outcome.winnerId === 1 ? 'win' : 'loss'
   }, [mode, state.outcome])
 
-  // Records the per-mode high score exactly once per round, on the onboarding/playing ->
-  // gameOver transition. hasRecordedRef (not just the phase check alone) guards against a second
-  // dispatch from an unrelated re-render while still in 'gameOver'; it resets the instant the
-  // round leaves 'gameOver' (via handleRetry above) so the next round's own transition can fire
-  // again. isNewHighScore is captured once at that same instant (compared against the pre-dispatch
-  // `highScores[mode]`) rather than derived live every render, so it can't flip from true to false
-  // the moment the dispatch below actually lands.
+  // Records stats/achievements exactly once per round, on the onboarding/playing -> gameOver
+  // transition. hasRecordedRef (not just the phase check alone) guards against a second dispatch
+  // from an unrelated re-render while still in 'gameOver'; it resets the instant the round leaves
+  // 'gameOver' (via handleRetry above) so the next round's own transition can fire again.
+  // isNewHighScore is captured once at that same instant (compared against the pre-update
+  // `viewerStats`) rather than derived live every render, so it can't flip from true to false the
+  // moment recordRoundOutcome below actually lands.
   const hasRecordedRef = useRef(false)
   const [isNewHighScore, setIsNewHighScore] = useState(false)
 
@@ -258,12 +264,10 @@ export default function GameScreen() {
     if (hasRecordedRef.current) return
     hasRecordedRef.current = true
 
-    setIsNewHighScore(recordedScore > highScores[mode])
-    dispatch(gameActions.setHighScore({ mode, score: recordedScore }))
+    setIsNewHighScore(recordedScore > viewerStats.byMode[mode].bestScore)
 
-    // Stats/achievements ride the same single-fire transition as the high score above, so the two
-    // records can never disagree about what happened this round. Solo carries no result: there's
-    // no opponent, so it stays out of the versus record entirely (see utils/statsEngine.ts).
+    // Solo carries no result: there's no opponent, so it stays out of the versus record entirely
+    // (see utils/statsEngine.ts).
     const result = gameOverOutcome ?? null
     // peakLength, not live body.length — a Constrict can shrink a body mid-round (see types/index.ts's
     // own SnakeEntity.peakLength comment), and this stat should credit the high-water mark a snake
@@ -278,7 +282,7 @@ export default function GameScreen() {
       showAchievementToast(achievement.title, 'Achievement unlocked', undefined, { color: ACHIEVEMENT_TIER_COLORS[achievement.tier], icon: achievement.icon })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- state.snakes is read once per gameOver entry, matching the roundOver effect below; adding it would re-run this on every tick.
-  }, [phase, mode, recordedScore, highScores, dispatch, gameOverOutcome, cpuDifficulty, lastSelected, recordRoundOutcome, showAchievementToast])
+  }, [phase, mode, recordedScore, viewerStats, gameOverOutcome, cpuDifficulty, lastSelected, recordRoundOutcome, showAchievementToast])
 
   // Crash sound + haptic — fires once, the instant the engine's own state.phase (not the derived,
   // onboarding-aware `phase` above) flips into 'roundOver', mirroring LightCycles' own immediate
@@ -403,7 +407,7 @@ export default function GameScreen() {
 
       {phase === 'onboarding' && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} lockOrientation={lockOrientation} />}
 
-      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(highScores[mode], recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} rotation={overlayRotation} />}
+      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(viewerStats.byMode[mode].bestScore, recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} rotation={overlayRotation} />}
 
       {/* Kept as its own sibling of the board/gesture tree above, mirroring LightCycles'/BoxHockey's
       identically-motivated MatchOverlays split — this live tilt subscription's re-renders should
