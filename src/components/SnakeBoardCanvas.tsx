@@ -750,6 +750,17 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
   const prevBodySV = useSharedValue<GridCell[]>(snake.body)
   const currBodySV = useSharedValue<GridCell[]>(snake.body)
   const bodyProgress = useSharedValue(1)
+  // Mirrors currBodySV.value one commit behind, as a plain ref rather than a second shared value
+  // — wrapEcho below needs this exact value at render time (see its own comment), and reading a
+  // SharedValue's `.value` synchronously during render is what trips Reanimated's own strict-mode
+  // "Reading from `value` during component render" advisory. A plain ref gets a related but purely
+  // static warning of its own (eslint-plugin-react-hooks' react-hooks/refs — see wrapEcho's own
+  // comment for why that one's suppressed rather than designed around): unlike the Reanimated
+  // advisory, which is a genuine runtime UI/JS-thread hazard with no safe opt-out, that rule's
+  // general "a ref can change between render attempts" concern doesn't apply to a ref that's only
+  // ever written post-commit, inside the tick effect below — kept in lockstep with currBodySV.value
+  // at both of that effect's assignment points.
+  const lastCommittedBodyRef = useRef(snake.body)
 
   // The death fade: 0 while alive (or not yet started), animating to 1 once over
   // snakeDeathFadeMs(bodyLength) the instant `alive` flips false — see fadeFactorForDist's own
@@ -778,6 +789,7 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
       // board from wherever last round's body ended up to the new spawn point.
       prevBodySV.value = snake.body
       currBodySV.value = snake.body
+      lastCommittedBodyRef.current = snake.body
       bodyProgress.value = 1
       // deathProgress is a stable Reanimated SharedValue ref (like bodyProgress above), not
       // reactive state — same false-positive category TouchInputLayer.tsx's own SharedValue
@@ -799,6 +811,7 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
     if (snake.body === currBodySV.value) return
     prevBodySV.value = currBodySV.value
     currBodySV.value = snake.body
+    lastCommittedBodyRef.current = snake.body
     bodyProgress.value = 0
     bodyProgress.value = withTiming(1, { duration: tickIntervalMs, easing: Easing.linear })
   }, [tick, tickIntervalMs, snake.body, prevBodySV, currBodySV, bodyProgress, deathProgress, deathPhaseSV])
@@ -811,17 +824,30 @@ function SnakeBody({ snake, cellPx, phase, tertiaryColor, surfaceColor, tick, ti
   // classic Asteroids/Pac-Man wraparound look instead of the old snap. A plain computed value
   // rather than state-in-an-effect (which a first cut at this used, and which
   // react-hooks/set-state-in-effect rightly flagged): SnakeBody only ever re-renders when `snake`
-  // itself changes (once per tick, from Redux), and currBodySV.value at render time still holds
-  // whatever the PREVIOUS tick's effect committed — the tick effect above hasn't run yet for THIS
-  // render — so comparing the two here already reads exactly "this tick's move," with no need to
-  // stash it in state first. Naturally null again on the very next render once the head is no
-  // longer jumping (the ordinary case), so the echo is OMITTED from the tree entirely (not just
-  // hidden) outside the one tick it's actually needed for.
+  // itself changes (once per tick, from Redux), and lastCommittedBodyRef.current at render time
+  // still holds whatever the PREVIOUS tick's effect committed — the tick effect above hasn't run
+  // yet for THIS render — so comparing the two here already reads exactly "this tick's move," with
+  // no need to stash it in state first. Reads that plain ref rather than currBodySV.value itself —
+  // Reanimated's own strict-mode logger flags any `.value` read made synchronously during render,
+  // and this computation runs directly in the render body (not inside a worklet or
+  // useDerivedValue), so it would otherwise qualify even though the value read is identical either
+  // way. Naturally null again on the very next render once the head is no longer jumping (the
+  // ordinary case), so the echo is OMITTED from the tree entirely (not just hidden) outside the one
+  // tick it's actually needed for.
   const wrapEcho = ((): { dx: number; dy: number } | null => {
-    if (tick === 0 || snake.body === currBodySV.value) return null
-    const oldHead = currBodySV.value[currBodySV.value.length - 1]
+    // lastCommittedBodyRef is only ever written post-commit, inside the tick effect above — every
+    // render attempt for a given commit observes the same stable value, so the "a ref can change
+    // between render attempts" hazard react-hooks/refs otherwise guards against doesn't apply here
+    // (see the ref's own declaration comment for why it exists instead of reading currBodySV.value
+    // directly).
+    // eslint-disable-next-line react-hooks/refs -- ref is only mutated post-commit, safe to read here; see comment above
+    if (tick === 0 || snake.body === lastCommittedBodyRef.current) return null
+    // eslint-disable-next-line react-hooks/refs -- ref is only mutated post-commit, safe to read here; see comment above
+    const oldHead = lastCommittedBodyRef.current[lastCommittedBodyRef.current.length - 1]
     const newHead = snake.body[snake.body.length - 1]
+    // eslint-disable-next-line react-hooks/refs -- oldHead is derived from the ref read above, same false positive
     const rawDx = newHead.x - oldHead.x
+    // eslint-disable-next-line react-hooks/refs -- oldHead is derived from the ref read above, same false positive
     const rawDy = newHead.y - oldHead.y
     // Sign comes from the UNWRAPPED delta (the real step direction), not the raw one — a wrap's
     // raw delta always swings to the opposite extreme of the actual step (e.g. a genuine +1
