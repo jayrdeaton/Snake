@@ -1,9 +1,8 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
-import { ACHIEVEMENT_TIER_COLORS, unlockedKey } from '@tastic/achievements'
+import { getAchievementCatalogRows } from '@tastic/achievements'
 import { FakeLandscapeView, rotateInsets, useRotation } from '@tastic/core'
-import { AchievementRow, BaseStatsScreen, LOCKED_BADGE_COLOR, MONO_FONT, StatRow, StatSection, usePopoverHost } from '@tastic/hud'
+import { AchievementCatalogSection, ActivityStatSection, BaseStatsScreen, MONO_FONT, StatRow, StatSection, usePopoverHost } from '@tastic/hud'
 import { ProfileChip, ProfilePicker } from '@tastic/profile'
-import { router } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Text } from 'react-native-paper'
@@ -13,25 +12,11 @@ import { ACHIEVEMENT_CATALOG } from '@/constants/achievements'
 import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
 import { SnakeMode } from '@/hooks/useSnakeState'
+import { safeBack } from '@/utils/navigation'
 import { getBestScoreAnyMode, getProfileRankings, getProfileStatsView, getTotalPlayed, getTotalScore, ProfileRanking } from '@/utils/statsEngine'
 import { DEFAULT_PROFILE_STATS, SNAKE_MODES } from '@/utils/statsValidation'
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000
-
 const MODE_LABELS: Record<SnakeMode, string> = { solo: 'Solo', vsCpu: 'Vs CPU', twoPlayer: '2 Player' }
-
-function startOfDay(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-}
-
-// Calendar-day difference, not raw elapsed time, so something unlocked at 11pm reads as "1 day ago"
-// once the date rolls over rather than a full 24 hours later.
-function unlockedLabel(unlockedAt: number): string {
-  const days = Math.round((startOfDay(new Date()) - startOfDay(new Date(unlockedAt))) / MS_PER_DAY)
-  if (days <= 0) return 'Unlocked today'
-  if (days === 1) return 'Unlocked 1 day ago'
-  return `Unlocked ${days} days ago`
-}
 
 interface ProfileRankingRowProps {
   ranking: ProfileRanking
@@ -90,11 +75,24 @@ export default function AchievementsScreen() {
   // unlocked, etc.) for the brief window before useGameStats' own AsyncStorage read resolves. This
   // screen is reached by navigation, not the first screen, so it's a screen-local guard rather than
   // a new splash-gate entry (see useGameStats.tsx's own GameStatsProvider doc).
-  if (!loaded) return null
+  //
+  // Renders the real screen shell (not a bare null) during this window, matching AirHockey/
+  // BoxHockey/Pong/LightCycles — a bare null briefly drops the header/back button entirely, which
+  // is jarring on a screen reached by navigation (the user just tapped something to get here).
+  // onReset is omitted here too — nothing worth resetting has rendered yet.
+  if (!loaded) {
+    return (
+      <FakeLandscapeView style={styles.rotatable}>
+        <BaseStatsScreen onBack={safeBack} insets={insets} rotation={rotation}>
+          <Text style={{ color: fgMuted, fontFamily: MONO_FONT }}>Loading…</Text>
+        </BaseStatsScreen>
+      </FakeLandscapeView>
+    )
+  }
 
   return (
     <FakeLandscapeView style={styles.rotatable}>
-      <BaseStatsScreen onBack={() => router.back()} insets={insets} onReset={resetAll} resetConfirmBody='This permanently erases every high score, stat and achievement. This cannot be undone.' rotation={rotation}>
+      <BaseStatsScreen onBack={safeBack} insets={insets} onReset={resetAll} resetConfirmBody='This permanently erases every high score, stat and achievement. This cannot be undone.' rotation={rotation}>
         {profiles.length > 0 && <ProfilePicker idPrefix='achievements' host={profilePickerHost} profiles={profiles} selectedId={effectiveProfileId} color={themeColors.primary} dark={dark} guestLabel='All Profiles' nullLabel='All Profiles' nullIcon='account-group' onSelect={(profile) => setSelectedProfileId(profile?.id ?? null)} />}
 
         <StatSection label='OVERALL'>
@@ -128,26 +126,9 @@ export default function AchievementsScreen() {
           </StatSection>
         )}
 
-        <StatSection label='ACTIVITY'>
-          <StatRow label='Days Played' value={String(statsView.distinctDaysPlayed)} />
-          <StatRow label='Day Streak' value={String(statsView.currentDayStreak)} />
-          <StatRow label='Best Day Streak' value={String(statsView.bestDayStreak)} />
-        </StatSection>
+        <ActivityStatSection stats={statsView} />
 
-        <Text variant='labelMedium' style={[styles.listLabel, { color: fgMuted, fontFamily: MONO_FONT }]}>
-          ALL ACHIEVEMENTS
-        </Text>
-        {ACHIEVEMENT_CATALOG.map((achievement) => {
-          // scope:'device' always evaluates against the real device stats and its bare-id key,
-          // regardless of which tab is active; everything else follows the selected view. On
-          // "All Profiles" both branches collapse to the same thing.
-          const scope = achievement.scope ?? 'profile'
-          const evalStats = scope === 'device' ? stats : statsView
-          const unlockedAt = unlockedAchievements[unlockedKey(achievement.id, scope === 'device' ? null : effectiveProfileId)]
-          const progress = unlockedAt === undefined ? achievement.progress?.(evalStats) : undefined
-          const tierColor = ACHIEVEMENT_TIER_COLORS[achievement.tier]
-          return <AchievementRow key={achievement.id} icon={achievement.icon} title={achievement.title} description={achievement.description} badgeColor={unlockedAt !== undefined ? tierColor : LOCKED_BADGE_COLOR} checkColor={tierColor} unlockedLabel={unlockedAt !== undefined ? unlockedLabel(unlockedAt) : undefined} progress={progress} deviceMarker={effectiveProfileId !== null && scope === 'device'} />
-        })}
+        <AchievementCatalogSection rows={getAchievementCatalogRows(ACHIEVEMENT_CATALOG, stats, statsView, unlockedAchievements, effectiveProfileId)} />
       </BaseStatsScreen>
     </FakeLandscapeView>
   )
@@ -156,10 +137,6 @@ export default function AchievementsScreen() {
 const styles = StyleSheet.create({
   boldText: {
     fontWeight: 'bold'
-  },
-  listLabel: {
-    letterSpacing: 2,
-    marginTop: 8
   },
   profileValue: {
     alignItems: 'center',

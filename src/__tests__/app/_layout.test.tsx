@@ -40,7 +40,7 @@ describe('RootLayout', () => {
   })
 
   it('calls SplashScreen.setOptions with fade animation on module load', () => {
-    expect(SplashScreen.setOptions).toHaveBeenCalledWith({ duration: 500, fade: true })
+    expect(SplashScreen.setOptions).toHaveBeenCalledWith({ fade: true, duration: 400 })
   })
 
   it('renders without crashing', async () => {

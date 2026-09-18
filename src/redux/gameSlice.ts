@@ -50,6 +50,13 @@ export type GameSliceState = {
   // opponent's last color and a human guest's last color don't fight over one remembered value
   // (seat 1 is never CPU — see game.tsx's own spawn convention).
   lastCpuColor: string
+  // A manual recolor/clash-swap landing on a seat that currently has a profile selected — null
+  // means "no override, track the profile's own saved color live." Cleared only when that seat's
+  // own selection genuinely changes (see loadout.tsx's handleP1ProfileSelect/handleP2ProfileSelect),
+  // never by merely leaving and returning to /loadout — persisted here (unlike the transient
+  // in-memory ref this used to be) so it survives a focus regain or a full relaunch the same way
+  // lastGuestColor/lastCpuColor already do.
+  profileOverride: Record<SnakeId, string | null>
   // /loadout's own per-seat control-scheme picker (web only — see PlayerSetupPanel's showControlScheme).
   // Persisted here rather than on Profile (unlike LightCycles' Profile.keyScheme) since Snake's
   // Profile is the shared @tastic/profile package's own type as-is (see useProfiles.tsx's own
@@ -85,6 +92,7 @@ export const defaultGameState: GameSliceState = {
   deferBottomEdgeGestures: false,
   lastGuestColor: { 1: SNAKE_COLORS[1], 2: SNAKE_COLORS[2] },
   lastCpuColor: SNAKE_COLORS[2],
+  profileOverride: { 1: null, 2: null },
   controlScheme: { 1: 'mouse', 2: 'wasd' },
   speedTier: 'normal',
   arenaVariant: 'open',
@@ -106,6 +114,10 @@ const slice = createSlice({
       lastGuestColor: { ...state.lastGuestColor, [action.payload.seat]: action.payload.color }
     }),
     setLastCpuColor: (state, action: PayloadAction<string>) => ({ ...state, lastCpuColor: action.payload }),
+    setProfileOverride: (state, action: PayloadAction<{ seat: SnakeId; color: string | null }>) => ({
+      ...state,
+      profileOverride: { ...state.profileOverride, [action.payload.seat]: action.payload.color }
+    }),
     setControlScheme: (state, action: PayloadAction<{ seat: SnakeId; scheme: ControlScheme }>) => ({
       ...state,
       controlScheme: { ...state.controlScheme, [action.payload.seat]: action.payload.scheme }
@@ -122,10 +134,11 @@ const slice = createSlice({
   // comment, which is what lets this extraReducer's own return value pre-empt that wholesale
   // replacement instead of being clobbered by it. Without this, anyone whose last persisted session
   // predates a field being added here (enabledPowerups, controlScheme, speedTier, arenaVariant,
-  // lockOrientation, deferBottomEdgeGestures, gridSizeTier all landed after this slice's very first
-  // shape) would rehydrate with that field genuinely `undefined` — not defaultGameState's own value —
-  // the first time this code runs against their existing AsyncStorage data, crashing anything that
-  // assumes the type it's declared as (e.g. loadout.tsx's `enabledPowerups.length`).
+  // lockOrientation, deferBottomEdgeGestures, gridSizeTier, profileOverride all landed after this
+  // slice's very first shape) would rehydrate with that field genuinely `undefined` — not
+  // defaultGameState's own value — the first time this code runs against their existing
+  // AsyncStorage data, crashing anything that assumes the type it's declared as (e.g. loadout.tsx's
+  // `enabledPowerups.length`).
   extraReducers: (builder) => {
     builder.addCase(REHYDRATE, (state, action: { type: typeof REHYDRATE; payload?: { game?: Partial<GameSliceState> } }) => ({ ...defaultGameState, ...state, ...action.payload?.game }))
   }

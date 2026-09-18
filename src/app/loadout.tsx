@@ -1,27 +1,34 @@
 import { defaultColors, getThirdColor, useAutoPaperTheme, useThemeSettings } from '@rific/auto-paper'
 import { FakeLandscapeView, getViewRotation, rotateInsets, useOrientationState } from '@tastic/core'
-import { CornerActionButtons, LabeledDropdownOption, MenuOption, PressAwayOverlay, ReadyButton, SharedActionBand, usePopoverHost } from '@tastic/hud'
+import { ControlSchemePicker, CornerActionButtons, getColorPopoverId, getCpuDifficultyPopoverId, getInlineColorPickerContentSize, getLabeledDropdownContentHeight, LABELED_DROPDOWN_POPOVER_WIDTH, LabeledDropdownOption, MenuOption, PlayerSetupPanel, PressAwayOverlay, ReadyButton, SharedActionBand, usePopoverHost, useZoneClampedAlign } from '@tastic/hud'
+import type { Profile } from '@tastic/profile'
 import { DualZoneLayout, needsSharedNeutralZone, useDualZoneLayout } from '@tastic/split-screen'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, useWindowDimensions, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useDispatch, useSelector } from 'react-redux'
 
 import { LOADOUT_SHARED_CONTROLS_IDS, LoadoutSharedControls } from '@/components/LoadoutSharedControls'
-import { CpuDifficultyChoice, PlayerSetupPanel } from '@/components/PlayerSetupPanel'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { SNAKE_POWERUP_ALL_TYPES, SNAKE_POWERUP_ICONS } from '@/constants/snake'
 import { useProfiles } from '@/hooks/useProfiles'
 import { SnakeMode } from '@/hooks/useSnakeState'
-import { defaultGameState, gameActions } from '@/redux/gameSlice'
+import { CpuDifficulty, defaultGameState, gameActions } from '@/redux/gameSlice'
 import type { RootState } from '@/redux/store'
 import { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
+import { safeBack } from '@/utils/navigation'
 
 // Same 180ms panel-swap fade every other @tastic loadout screen uses (see BoxHockey's/AirHockey's
 // own constant of the same name/value).
 const PANEL_SWAP_FADE_MS = 180
+
+// 'none' is a Snake-specific extension beyond a plain CpuDifficulty — this seat's own "no CPU at
+// all" choice (see the 1-Player flow below), never persisted as a difficulty preference. Was
+// previously declared in the now-removed local PlayerSetupPanel.tsx (moved to @tastic/hud); lives
+// here now since this is its only remaining call site.
+type CpuDifficultyChoice = CpuDifficulty | 'none'
 
 // Snake-flavored escalation instead of a plain skill-level label, matching LightCycles' own
 // Drone/Bot/MCP convention but in reptile language rather than Tron's: "Garter" (a real, famously
@@ -121,6 +128,11 @@ export default function LoadoutScreen() {
   const dispatch = useDispatch()
   const lastGuestColor = useSelector((state: RootState) => state.game.lastGuestColor)
   const lastCpuColor = useSelector((state: RootState) => state.game.lastCpuColor)
+  // A manual recolor/clash-swap landing on a seat that currently has a profile selected — see
+  // redux/gameSlice.ts's own profileOverride comment. Persisted (survives navigation and relaunch),
+  // only cleared when that seat's own selection genuinely changes (handleP1ProfileSelect/
+  // handleP2ProfileSelect below), never by merely leaving and returning to this screen.
+  const profileOverride = useSelector((state: RootState) => state.game.profileOverride)
   const persistedCpuDifficulty = useSelector((state: RootState) => state.game.cpuDifficulty)
   // Promoted here from SettingsDialog's own former "BOARD" section — see LoadoutSharedControls'
   // own header comment for why. Persisted straight to gameSlice, same as every other Snake
@@ -148,10 +160,11 @@ export default function LoadoutScreen() {
   // Per-round only — these never need to persist past this screen; /game reads them once via route
   // params (see game.tsx) and falls back to createInitialSnakeState's own SNAKE_COLORS defaults for
   // every other call site. Seeded here from whichever source currently owns the seat's color
-  // (profile > last guest color, or last CPU color for 1 Player's seat 2) so the very first paint
-  // already matches; the focus effect below is what keeps it that way afterward.
-  const [p1Color, setP1Color] = useState(() => p1Profile?.color ?? lastGuestColor[1])
-  const [p2Color, setP2Color] = useState(() => (p2IsHuman ? (p2Profile?.color ?? lastGuestColor[2]) : lastCpuColor))
+  // (profile, honoring any active override, > last guest color, or last CPU color for 1 Player's
+  // seat 2) so the very first paint already matches; the focus effect below is what keeps it that
+  // way afterward.
+  const [p1Color, setP1Color] = useState(() => (p1Profile ? (profileOverride[1] ?? p1Profile.color) : lastGuestColor[1]))
+  const [p2Color, setP2Color] = useState(() => (p2IsHuman ? (p2Profile ? (profileOverride[2] ?? p2Profile.color) : lastGuestColor[2]) : lastCpuColor))
 
   // 1 Player's own CPU-seat choice — Easy/Normal/Hard/None (see CPU_DIFFICULTY_OPTIONS). Seeded
   // from (and, on every focus, reset back to) the persisted preference, same convention as
@@ -161,16 +174,17 @@ export default function LoadoutScreen() {
   // (see gameSlice.ts's own cpuDifficulty comment), which folds into this same "no CPU" state.
   const [difficulty, setDifficulty] = useState<CpuDifficultyChoice>(persistedCpuDifficulty ?? 'none')
 
-  // (a) A seat with a profile selected always shows that profile's current color — never a
-  // persisted-color read of its own. Refires on every focus (first mount, and coming back to an
-  // already-mounted /loadout via the post-game "Loadout" button), so a manual recolor or clash-swap
-  // made against a profile earlier in this session doesn't survive a trip away and back — and
-  // whenever a seat's own selected profile id changes (a fresh tap-select, or switching to/from
-  // guest). Deliberately NOT keyed on the profile records or the guest/CPU slots themselves — an
-  // edit to a profile elsewhere while the same one stays selected here, or this screen's own writes
-  // to those slots below, must not bounce this back. Those four are instead read through refs, each
-  // kept in sync by its own trivial effect below, so the callback still sees their CURRENT values on
-  // a real refire instead of whatever they were frozen at on the last lastSelected/p2IsHuman change.
+  // (a) A seat with a profile selected shows that profile's own color, unless a manual recolor/
+  // clash-swap has landed an override on it (see redux/gameSlice.ts's own profileOverride comment)
+  // — in which case the override wins instead. Refires on every focus (first mount, and coming back
+  // to an already-mounted /loadout via the post-game "Loadout" button), so a profile edited
+  // elsewhere via /profiles is picked up the instant you're back, and whenever a seat's own selected
+  // profile id changes (a fresh tap-select, or switching to/from guest). Deliberately NOT keyed on
+  // the profile records, the guest/CPU slots, or profileOverride itself — an edit to a profile
+  // elsewhere while the same one stays selected here, or this screen's own writes to those slots
+  // below, must not bounce this back. Those five are instead read through refs, each kept in sync by
+  // its own trivial effect below, so the callback still sees their CURRENT values on a real refire
+  // instead of whatever they were frozen at on the last lastSelected/p2IsHuman change.
   const p1ProfileRef = useRef(p1Profile)
   useEffect(() => {
     p1ProfileRef.current = p1Profile
@@ -187,6 +201,10 @@ export default function LoadoutScreen() {
   useEffect(() => {
     lastCpuColorRef.current = lastCpuColor
   }, [lastCpuColor])
+  const profileOverrideRef = useRef(profileOverride)
+  useEffect(() => {
+    profileOverrideRef.current = profileOverride
+  }, [profileOverride])
   const persistedCpuDifficultyRef = useRef(persistedCpuDifficulty)
   useEffect(() => {
     persistedCpuDifficultyRef.current = persistedCpuDifficulty
@@ -194,8 +212,9 @@ export default function LoadoutScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setP1Color(p1ProfileRef.current?.color ?? lastGuestColorRef.current[1])
-      setP2Color(p2IsHuman ? (p2ProfileRef.current?.color ?? lastGuestColorRef.current[2]) : lastCpuColorRef.current)
+      const override = profileOverrideRef.current
+      setP1Color(p1ProfileRef.current ? (override[1] ?? p1ProfileRef.current.color) : lastGuestColorRef.current[1])
+      setP2Color(p2IsHuman ? (p2ProfileRef.current ? (override[2] ?? p2ProfileRef.current.color) : lastGuestColorRef.current[2]) : lastCpuColorRef.current)
       setDifficulty(persistedCpuDifficultyRef.current ?? 'none')
       // lastSelected is intentionally a trigger-only dependency here — a fresh tap-select or
       // guest/profile switch must reapply the seat's color, even though the callback body reads the
@@ -216,13 +235,18 @@ export default function LoadoutScreen() {
     [dispatch]
   )
 
-  // (b)/(c): a profile-selected seat's color is never written here — the effect above is what
-  // keeps it live instead, so a manual recolor/clash-swap against it stays a for-this-visit-only
-  // override. A guest and 1 Player's CPU seat 2 each get their own remembered slot, so a CPU
-  // opponent's last color and a human guest's last color don't fight over one persisted value.
+  // (b)/(c): a profile-selected seat's own recolor now persists too — as that seat's override (see
+  // redux/gameSlice.ts's own profileOverride comment) rather than being silently dropped, so it
+  // survives leaving and returning to /loadout (or a relaunch) the same way a guest's or the CPU's
+  // own remembered color already did. A guest and 1 Player's CPU seat 2 still each get their own
+  // remembered slot, so a CPU opponent's last color, a human guest's last color, and a profile's own
+  // override never fight over one persisted value.
   const persistP1Color = useCallback(
     (hex: string) => {
-      if (p1Profile) return
+      if (p1Profile) {
+        dispatch(gameActions.setProfileOverride({ seat: 1, color: hex }))
+        return
+      }
       dispatch(gameActions.setLastGuestColor({ seat: 1, color: hex }))
     },
     [p1Profile, dispatch]
@@ -233,7 +257,10 @@ export default function LoadoutScreen() {
         dispatch(gameActions.setLastCpuColor(hex))
         return
       }
-      if (p2Profile) return
+      if (p2Profile) {
+        dispatch(gameActions.setProfileOverride({ seat: 2, color: hex }))
+        return
+      }
       dispatch(gameActions.setLastGuestColor({ seat: 2, color: hex }))
     },
     [p2IsHuman, p2Profile, dispatch]
@@ -270,6 +297,26 @@ export default function LoadoutScreen() {
       }
     },
     [p1Color, p2Color, p2Exists, persistP1Color, persistP2Color]
+  )
+
+  // Clears this seat's own persisted override before the new selection takes over, so a manual
+  // recolor/clash-swap made under the previous profile (or as a guest) can't leak into whichever
+  // profile just got picked — see redux/gameSlice.ts's own profileOverride comment. selectProfile
+  // itself only updates lastSelected; the color-sync effect/focus-effect above pick up this seat's
+  // freshly-selected profile's own color once profileOverride[seat] has already been cleared here.
+  const handleP1ProfileSelect = useCallback(
+    (profile: Profile | null) => {
+      dispatch(gameActions.setProfileOverride({ seat: 1, color: null }))
+      selectProfile(1, profile?.id ?? null)
+    },
+    [dispatch, selectProfile]
+  )
+  const handleP2ProfileSelect = useCallback(
+    (profile: Profile | null) => {
+      dispatch(gameActions.setProfileOverride({ seat: 2, color: null }))
+      selectProfile(2, profile?.id ?? null)
+    },
+    [dispatch, selectProfile]
   )
 
   // The app-wide theme follows whichever colors are actually live here — primary is always P1's,
@@ -406,14 +453,51 @@ export default function LoadoutScreen() {
   // boolean below.
   const sharedControlsPopoverOpen = controlsHost.openId !== null && LOADOUT_SHARED_CONTROLS_IDS.includes(controlsHost.openId)
   const sharedControls = showMetaInSharedBand ? (
-    <SharedActionBand onBack={() => router.back()} onSettings={() => setSettingsOpen(true)} onRandomize={handleRandomizeMatchSettings} onReset={handleResetMatchSettings} fg={fg} popoverOpen={sharedControlsPopoverOpen}>
+    <SharedActionBand onBack={safeBack} onSettings={() => setSettingsOpen(true)} onRandomize={handleRandomizeMatchSettings} onReset={handleResetMatchSettings} fg={fg} popoverOpen={sharedControlsPopoverOpen}>
       {sharedControlsRow}
     </SharedActionBand>
   ) : (
     sharedControlsRow
   )
 
-  const p1Panel = <PlayerSetupPanel idPrefix='p1' host={controlsHost} color={p1Color} onColorChange={handleP1ColorChange} swatches={defaultColors} takenColor={p2Exists ? p2Color : undefined} allowSwapTaken={routeMode === 'onePlayer' && p2Exists} isHuman controlScheme={controlScheme[1]} onControlSchemeChange={(scheme) => dispatch(gameActions.setControlScheme({ seat: 1, scheme }))} controlSchemeOptions={CONTROL_SCHEME_OPTIONS} otherControlScheme={p2IsHuman ? controlScheme[2] : undefined} ready={ready[1]} onToggleReady={() => setReady((r) => ({ ...r, 1: !r[1] }))} dark={dark} showReadyButton={showReadyButton} profiles={profiles} selectedProfileId={lastSelected[1]} takenProfileId={lastSelected[2]} guestLabel='P1' onProfileSelect={(profile) => selectProfile(1, profile?.id ?? null)} onManageProfiles={() => router.push('/profiles')} />
+  // @tastic/hud's PlayerSetupPanel has no opinion on what (if anything) sits beside the color
+  // picker — see its own secondPicker doc — so this app constructs the same ControlSchemePicker it
+  // always has and hands it in directly, sharing whichever host that panel's own color picker uses
+  // so a popover from either one still elevates the shared pickerRow correctly. secondPickerId names
+  // the popover id it opens under, so PlayerSetupPanel's own "elevate while one of my own popovers
+  // is open" logic still reacts to it exactly as it did when this was baked into that component.
+  const p1ControlSchemePicker = <ControlSchemePicker id='p1-controls' host={controlsHost} value={controlScheme[1]} onChange={(scheme) => dispatch(gameActions.setControlScheme({ seat: 1, scheme }))} options={CONTROL_SCHEME_OPTIONS} takenValue={p2IsHuman ? controlScheme[2] : undefined} accentColor={p1Color} mutedColor={fgMuted} dark={dark} />
+  const p2ControlSchemePicker = p2IsHuman ? <ControlSchemePicker id='p2-controls' host={p2Host} value={controlScheme[2]} onChange={(scheme) => dispatch(gameActions.setControlScheme({ seat: 2, scheme }))} options={CONTROL_SCHEME_OPTIONS} takenValue={controlScheme[1]} accentColor={p2Color} mutedColor={fgMuted} dark={dark} /> : undefined
+
+  // @tastic/hud@0.9.0 added cpuDifficultyAlignOverride, a pass-through from PlayerSetupPanel down
+  // to its own internal LabeledDropdown's pre-existing alignOverride prop — closing the exact gap
+  // LightCycles' own lobby.tsx p2Panel comment used to document (no override existed at all before
+  // this version). Wired in here for parity with every other zone-aware popover on this screen, but
+  // it's a confirmed no-op for Snake specifically, not a real fix: the CPU-difficulty picker only
+  // ever renders for a non-human seat 2 (cpuDifficulty={p2IsHuman ? undefined : difficulty} below),
+  // which only exists in 1 Player mode, and 1 Player always renders in the plain stacked View branch
+  // below (routeMode === 'onePlayer'), never inside DualZoneLayout — so there is no ambient
+  // @tastic/split-screen zone for it to clamp against. useZoneBounds() is therefore null there and
+  // useZoneClampedAlign silently falls back to useAutoAlign's own plain screen-edge-relative result,
+  // exactly as LightCycles documented for its own identical case.
+  const cpuDifficultyOpen = p2Host.openId === getCpuDifficultyPopoverId('p2')
+  const cpuDifficultyAlignOverride = useZoneClampedAlign(cpuDifficultyOpen, LABELED_DROPDOWN_POPOVER_WIDTH, getLabeledDropdownContentHeight(CPU_DIFFICULTY_OPTIONS.length))
+
+  // Same zone-clamped-alignment need as cpuDifficultyAlignOverride just above, but for each seat's
+  // own color picker instead — unlike the CPU-difficulty picker, EVERY seat (p1 and human-or-CPU p2)
+  // always has one, and both panels pass the same swatches={defaultColors} palette, so their content
+  // size is identical and only needs computing once. Unlike cpuDifficultyAlignOverride, this is a
+  // real fix, not a confirmed no-op: p1Panel/p2Panel render directly inside a live DualZoneLayout
+  // zone in 2 Player mode, where the color popover's own default window-relative placement can
+  // overflow past the zone's shared-row boundary into the other player's half.
+  const { width: windowWidth } = useWindowDimensions()
+  const colorContentSize = getInlineColorPickerContentSize(defaultColors.length, windowWidth)
+  const p1ColorOpen = controlsHost.openId === getColorPopoverId('p1')
+  const p1ColorAlignOverride = useZoneClampedAlign(p1ColorOpen, colorContentSize.width, colorContentSize.height)
+  const p2ColorOpen = p2Host.openId === getColorPopoverId('p2')
+  const p2ColorAlignOverride = useZoneClampedAlign(p2ColorOpen, colorContentSize.width, colorContentSize.height)
+
+  const p1Panel = <PlayerSetupPanel idPrefix='p1' host={controlsHost} color={p1Color} onColorChange={handleP1ColorChange} swatches={defaultColors} takenColor={p2Exists ? p2Color : undefined} allowSwapTaken={routeMode === 'onePlayer' && p2Exists} colorAlignOverride={p1ColorAlignOverride} isHuman secondPicker={p1ControlSchemePicker} secondPickerId='p1-controls' ready={ready[1]} onToggleReady={() => setReady((r) => ({ ...r, 1: !r[1] }))} dark={dark} showReadyButton={showReadyButton} profiles={profiles} selectedProfileId={lastSelected[1]} takenProfileId={p2IsHuman ? lastSelected[2] : null} guestLabel='P1' onProfileSelect={handleP1ProfileSelect} onManageProfiles={() => router.push('/profiles')} />
   const p2Panel = (
     <PlayerSetupPanel
       idPrefix='p2'
@@ -423,11 +507,10 @@ export default function LoadoutScreen() {
       swatches={defaultColors}
       takenColor={p1Color}
       allowSwapTaken={routeMode === 'onePlayer' && p2Exists}
+      colorAlignOverride={p2ColorAlignOverride}
       isHuman={p2IsHuman}
-      controlScheme={p2IsHuman ? controlScheme[2] : undefined}
-      onControlSchemeChange={p2IsHuman ? (scheme) => dispatch(gameActions.setControlScheme({ seat: 2, scheme })) : undefined}
-      controlSchemeOptions={p2IsHuman ? CONTROL_SCHEME_OPTIONS : undefined}
-      otherControlScheme={p2IsHuman ? controlScheme[1] : undefined}
+      secondPicker={p2ControlSchemePicker}
+      secondPickerId={p2IsHuman ? 'p2-controls' : undefined}
       ready={p2IsHuman ? ready[2] : undefined}
       onToggleReady={p2IsHuman ? () => setReady((r) => ({ ...r, 2: !r[2] })) : undefined}
       dark={dark}
@@ -436,10 +519,12 @@ export default function LoadoutScreen() {
       selectedProfileId={lastSelected[2]}
       takenProfileId={lastSelected[1]}
       guestLabel='P2'
-      onProfileSelect={p2IsHuman ? (profile) => selectProfile(2, profile?.id ?? null) : undefined}
+      onProfileSelect={p2IsHuman ? handleP2ProfileSelect : undefined}
       cpuDifficulty={p2IsHuman ? undefined : difficulty}
       cpuDifficultyOptions={p2IsHuman ? undefined : CPU_DIFFICULTY_OPTIONS}
       onCpuDifficultyChange={p2IsHuman ? undefined : handleDifficultyChange}
+      cpuDifficultyAlignOverride={p2IsHuman ? undefined : cpuDifficultyAlignOverride}
+      cpuIcon={!p2IsHuman && difficulty === 'none' ? 'close-circle-outline' : 'robot'}
     />
   )
 
@@ -453,7 +538,7 @@ export default function LoadoutScreen() {
         <PressAwayOverlay active={controlsHost.openId !== null} onPress={controlsHost.close} />
         {p2ZoneStyle && <PressAwayOverlay active={controlsHost.openId !== null || p2Host.openId !== null} onPress={p2Host.close} style={p2ZoneStyle} />}
 
-        {!showMetaInSharedBand && <CornerActionButtons onBack={() => router.back()} onSettings={() => setSettingsOpen(true)} fg={fg} insets={insets} />}
+        {!showMetaInSharedBand && <CornerActionButtons onBack={safeBack} onSettings={() => setSettingsOpen(true)} fg={fg} insets={insets} />}
 
         {routeMode === 'twoPlayer' ? (
           <DualZoneLayout

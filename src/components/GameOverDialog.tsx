@@ -3,6 +3,9 @@ import { Button } from '@rific/feedback-press'
 import { StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
+import { ACHIEVEMENT_TIER_COLORS } from '@/constants/achievements'
+import { AchievementDefinition, SnakeId } from '@/types'
+
 // The two-rival modes' result, from the single viewer's own perspective — Vs CPU and 2 Player both
 // pass this straight in rather than a richer per-seat winner id, since this dialog (unlike
 // LightCycles' RoundOverDialog) is always ONE centered card, never a per-seat split (see this
@@ -19,6 +22,16 @@ export interface GameOverDialogProps {
   // renders a win/loss/draw framing instead, still showing both scores.
   outcome?: GameOverOutcome | null
   opponentScore?: number
+  // 2 Player only — seat -> whatever that seat's own profile newly unlocked this round (see
+  // game.tsx's own achievementUnlocks state). Solo/Vs CPU never pass this: both still surface
+  // unlocks via the existing screen-fixed showAchievementToast instead (only one human perspective
+  // to address in either — see game.tsx's own comment on why 2 Player can't reuse that same toast).
+  // Rendered as its own row per achievement rather than a second, per-seat-rotated card: this
+  // dialog never splits into a per-seat layout (see this file's own header comment above), so a
+  // seat 2 unlock is labeled OPPONENT (matching the scoreRow's existing YOU/OPPONENT framing below)
+  // instead of being re-oriented to face them — still an improvement over a toast that auto-dismissed
+  // before seat 2 could even turn the device around to read it.
+  achievementUnlocks?: Partial<Record<SnakeId, AchievementDefinition[]>>
   // Live physical-hold rotation (see @tastic/core's getViewRotation) — this is a single centered
   // card with no per-seat zone to match (see this file's own header comment), so it just rotates its
   // own content in place; defaults to 0 for call sites with no live orientation signal handy.
@@ -29,7 +42,7 @@ export interface GameOverDialogProps {
 // branch (icon + text + buttons in one centered overlay card) — NOT its two-player per-seat split
 // branch: Snake's two-rival modes still only ever show one dialog to whoever is looking at the
 // device between passes, so there's no second physical viewer to rotate a second card for.
-export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHome, outcome, opponentScore, rotation = 0 }: GameOverDialogProps) {
+export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHome, outcome, opponentScore, achievementUnlocks, rotation = 0 }: GameOverDialogProps) {
   const { colors, dark } = useAutoPaperTheme()
   const cardBg = dark ? '#111111' : '#F2F2F2'
   const cardBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
@@ -90,6 +103,33 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
           </Text>
         )}
 
+        {/* One row per achievement rather than a per-seat "N unlocked!" summary badge — mirrors
+        LightCycles' MatchOverDialog, whose own header comment explains why: a summary badge per
+        seat throws off vertical alignment whenever only one side has one, where a plain list under
+        everything else doesn't. YOU/OPPONENT reuses the scoreRow's own seat-1-perspective framing
+        above rather than a color swatch (unlike MatchOverDialog's avatar) — this dialog has no
+        `colors` prop of its own to draw one from, and the framing already established two lines up
+        says exactly the same thing. */}
+        {achievementUnlocks && (achievementUnlocks[1]?.length ?? 0) + (achievementUnlocks[2]?.length ?? 0) > 0 && (
+          <View style={styles.achievementList}>
+            {([1, 2] as SnakeId[]).flatMap((seat) =>
+              (achievementUnlocks[seat] ?? []).map((achievement) => (
+                <View key={`${seat}-${achievement.id}`} style={styles.achievementRow}>
+                  <View style={[styles.achievementIconBadge, { backgroundColor: ACHIEVEMENT_TIER_COLORS[achievement.tier] }]}>
+                    <Icon source={achievement.icon} size={12} color='#000000' />
+                  </View>
+                  <Text style={[styles.achievementRowLabel, { color: fg }]} numberOfLines={1}>
+                    {achievement.title}
+                  </Text>
+                  <Text variant='labelSmall' style={{ color: fgMuted }}>
+                    {seat === 1 ? 'YOU' : 'OPPONENT'}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
         {/* Home listed before Retry: both buttons render bottom-most in the card, so the LAST one
         authored lands nearest a thumb reaching up from the bottom of the screen — same ordering
         rationale as RoundOverDialog's own Quit-before-Rematch pair. */}
@@ -105,6 +145,27 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
 }
 
 const styles = StyleSheet.create({
+  achievementIconBadge: {
+    alignItems: 'center',
+    borderRadius: 9,
+    height: 18,
+    justifyContent: 'center',
+    width: 18
+  },
+  achievementList: {
+    gap: 6,
+    maxWidth: 260
+  },
+  achievementRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6
+  },
+  achievementRowLabel: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: '700'
+  },
   button: { width: 160 },
   card: {
     alignItems: 'center',

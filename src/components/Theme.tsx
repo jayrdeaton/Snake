@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { Fredoka_600SemiBold } from '@expo-google-fonts/fredoka'
-import { Provider, themeActions, type ThemeSettings } from '@rific/auto-paper'
+import { Provider, themeActions, type ThemeSettings, useThemeBridgeProps } from '@rific/auto-paper'
 import * as ExpoBlur from 'expo-blur'
 import { useFonts } from 'expo-font'
 import { type ReactNode, useCallback } from 'react'
@@ -33,8 +33,10 @@ export const Theme = ({ children }: ThemeProps) => {
   const [fontsLoaded] = useFonts({ ...MaterialCommunityIcons.font, [DISPLAY_FONT_FAMILY]: Fredoka_600SemiBold })
   useSplashReady('fonts', fontsLoaded)
 
+  const bridgeProps = useThemeBridgeProps({ initialValue: settings, onChange, onReady })
+
   return (
-    <Provider expoBlur={ExpoBlur} fontFamily={DISPLAY_FONT_FAMILY} initialValue={settings} onChange={onChange} onReady={onReady}>
+    <Provider {...bridgeProps} expoBlur={ExpoBlur} fontFamily={DISPLAY_FONT_FAMILY}>
       {children}
     </Provider>
   )

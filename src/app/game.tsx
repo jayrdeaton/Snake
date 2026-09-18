@@ -1,9 +1,10 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { IconButton, useVibration } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
+import { broadcastDeviceUnlocks } from '@tastic/achievements'
 import { computeContentBounds, FakeLandscapeView, getFixedZoneRotation, getViewRotation, rotateInsets, useOrientationState, useSettledWindowDimensions } from '@tastic/core'
 import { computeGridSize } from '@tastic/grid'
-import { ConfirmDialog } from '@tastic/hud'
+import { ConfirmDialog, useQuitConfirmation } from '@tastic/hud'
 import { needsSharedNeutralZone } from '@tastic/split-screen'
 import { useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -28,7 +29,7 @@ import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { SnakeMode, useSnakeState } from '@/hooks/useSnakeState'
 import { liveplayActions } from '@/redux/liveplaySlice'
 import type { RootState } from '@/redux/store'
-import { Direction, GamePhase, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
+import { AchievementDefinition, Direction, GamePhase, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
 import { safeBack } from '@/utils/navigation'
 import { DEFAULT_PROFILE_STATS } from '@/utils/statsValidation'
 
@@ -216,12 +217,10 @@ export default function GameScreen() {
   // when there's an actual score to lose, so backing out of a still-scoreless round (onboarding,
   // or a round that ended 0-0) exits immediately instead of confirming nothing. Previously this
   // screen had no confirmation at all — its back button only ever showed during onboarding, where
-  // this same zero-score case already made it a no-op.
-  const [confirmBackVisible, setConfirmBackVisible] = useState(false)
-  const onBackPress = useCallback(() => {
-    if (humanScore > 0 || (opponentScore ?? 0) > 0) setConfirmBackVisible(true)
-    else safeBack()
-  }, [humanScore, opponentScore])
+  // this same zero-score case already made it a no-op. Now backed by @tastic/hud's shared
+  // useQuitConfirmation — see that hook's own doc for why it owns only confirmVisible/requestBack/
+  // cancelBack, not the ConfirmDialog JSX/copy itself.
+  const { confirmVisible, requestBack, cancelBack } = useQuitConfirmation(() => humanScore > 0 || (opponentScore ?? 0) > 0, safeBack)
 
   // What actually gets persisted as "the" high score for this mode: Solo/Vs CPU track snake 1's
   // own score only (a strong CPU run in Vs CPU shouldn't inflate "your" high score); 2 Player
@@ -255,6 +254,15 @@ export default function GameScreen() {
   // moment recordRoundOutcome below actually lands.
   const hasRecordedRef = useRef(false)
   const [isNewHighScore, setIsNewHighScore] = useState(false)
+  // 2 Player only — seat -> whatever that seat's own profile newly unlocked this round, read by
+  // GameOverDialog to show each seat's own achievements alongside the score it already displays
+  // (see that component's own achievementUnlocks comment for why: seat 2 sits rotated 180° from
+  // seat 1 in this screen's face-to-face layout, so a shared, screen-fixed showAchievementToast
+  // below it is only ever right-side-up for whoever's seat 1). Always overwritten every round, even
+  // to {}, same as LightCycles' identical profileUnlockToast — GameOverDialog stays on screen far
+  // longer than a toast's own auto-dismiss, so a stale badge from the previous round can't rely on
+  // that to clear itself.
+  const [achievementUnlocks, setAchievementUnlocks] = useState<Partial<Record<SnakeId, AchievementDefinition[]>>>({})
 
   useEffect(() => {
     if (phase !== 'gameOver') {
@@ -274,13 +282,37 @@ export default function GameScreen() {
     // actually reached, not whatever it happened to shrink back down to before dying.
     const snakeLength = Math.max(...state.snakes.map((snake) => snake.peakLength), 0)
     // Only seats a human actually drives contribute a profile: snake 2 is the CPU in Vs CPU, and
-    // doesn't exist at all in Solo, so neither can carry one.
+    // doesn't exist at all in Solo, so neither can carry one. Seat-keyed (not a flattened list) so
+    // recordRoundOutcome can hand unlocks back split by seat below — see its own
+    // RecordRoundOutcomeContext.profileIds comment for why that association has to survive the call.
     const humanSeats: SnakeId[] = mode === 'twoPlayer' ? [1, 2] : [1]
-    const profileIds = humanSeats.map((seat) => lastSelected[seat]).filter((id): id is string => id !== null)
-    const unlocked = recordRoundOutcome({ mode, score: recordedScore, snakeLength, result }, { cpuDifficulty, profileIds })
-    unlocked.forEach((achievement) => {
-      showAchievementToast(achievement.title, 'Achievement unlocked', undefined, { color: ACHIEVEMENT_TIER_COLORS[achievement.tier], icon: achievement.icon })
+    const profileIds: Partial<Record<SnakeId, string>> = {}
+    humanSeats.forEach((seat) => {
+      const profileId = lastSelected[seat]
+      if (profileId) profileIds[seat] = profileId
     })
+    const unlocked = recordRoundOutcome({ mode, score: recordedScore, snakeLength, result }, { cpuDifficulty, profileIds })
+
+    // Both seats are human and physically opposite each other in 2 Player — broadcast device-wide
+    // unlocks (no seat owner of their own) into BOTH seats' lists, same as LightCycles' identical
+    // broadcast, so GameOverDialog's per-seat rows show them regardless of which seat is "YOU".
+    // Solo/Vs CPU never populate this (see achievementUnlocks' own comment above). Now shared via
+    // @tastic/achievements' own broadcastDeviceUnlocks — note this changes the "nothing unlocked"
+    // shape from {1:[],2:[]} to {}, behaviorally identical at GameOverDialog's own read site
+    // ((achievementUnlocks[seat] ?? []).map(...) and the summed .length check).
+    const seatUnlocks: Partial<Record<SnakeId, AchievementDefinition[]>> = mode === 'twoPlayer' ? broadcastDeviceUnlocks([1, 2] as SnakeId[], unlocked.profiles, unlocked.device) : {}
+    setAchievementUnlocks(seatUnlocks)
+
+    // Solo/Vs CPU: only ever one human perspective to address (Solo has no seat 2 at all; Vs CPU's
+    // seat 2 is the CPU and never earns a profile unlock of its own), so the existing screen-fixed
+    // toast is already always right-side-up for whoever's looking — no reason to route these into
+    // the dialog too.
+    if (mode !== 'twoPlayer') {
+      const merged = [...unlocked.device, ...(unlocked.profiles[1] ?? [])]
+      merged.forEach((achievement) => {
+        showAchievementToast(achievement.title, 'Achievement unlocked', undefined, { color: ACHIEVEMENT_TIER_COLORS[achievement.tier], icon: achievement.icon })
+      })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- state.snakes is read once per gameOver entry, matching the roundOver effect below; adding it would re-run this on every tick.
   }, [phase, mode, recordedScore, viewerStats, gameOverOutcome, cpuDifficulty, lastSelected, recordRoundOutcome, showAchievementToast])
 
@@ -407,7 +439,7 @@ export default function GameScreen() {
 
       {phase === 'onboarding' && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} lockOrientation={lockOrientation} />}
 
-      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(viewerStats.byMode[mode].bestScore, recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} rotation={overlayRotation} />}
+      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(viewerStats.byMode[mode].bestScore, recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} achievementUnlocks={mode === 'twoPlayer' ? achievementUnlocks : undefined} rotation={overlayRotation} />}
 
       {/* Kept as its own sibling of the board/gesture tree above, mirroring LightCycles'/BoxHockey's
       identically-motivated MatchOverlays split — this live tilt subscription's re-renders should
@@ -415,7 +447,7 @@ export default function GameScreen() {
       gameOver gating (previously back-only during onboarding) — matches BoxHockey's/AirHockey's/
       Pong's identical always-available back button, so there's a consistent way out of a finished
       round beyond GameOverDialog's own Home button. */}
-      <GameActionChips showBack={controlsVisible} showSettings={controlsVisible} onBack={onBackPress} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} lockOrientation={lockOrientation} />
+      <GameActionChips showBack={controlsVisible} showSettings={controlsVisible} onBack={requestBack} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} lockOrientation={lockOrientation} />
       <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={overlayRotation} />
 
       {/* Fleet-shared @tastic/hud ConfirmDialog, matching BoxHockey's/AirHockey's/LightCycles'/
@@ -424,7 +456,7 @@ export default function GameScreen() {
       opponent to show a "–" pairing against); vsCpu/twoPlayer show both scores in each snake's own
       color, same colored-segment convention the other apps use. */}
       <ConfirmDialog
-        visible={confirmBackVisible}
+        visible={confirmVisible}
         title='Quit Match?'
         message={
           mode === 'solo' ? (
@@ -442,7 +474,7 @@ export default function GameScreen() {
         icon='alert-circle-outline'
         destructive={false}
         onConfirm={safeBack}
-        onCancel={() => setConfirmBackVisible(false)}
+        onCancel={cancelBack}
         rotation={overlayRotation}
       />
     </View>

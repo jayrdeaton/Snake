@@ -1,11 +1,9 @@
-import { defaultColors, useAutoPaperTheme } from '@rific/auto-paper'
-import { IconButton } from '@rific/feedback-press'
-import { ProfilesManager, ProfilesManagerHandle } from '@tastic/profile'
-import { router } from 'expo-router'
-import { useRef } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { defaultColors } from '@rific/auto-paper'
+import { ProfilesScreen } from '@tastic/profile'
 
+import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
+import { safeBack } from '@/utils/navigation'
 
 // A real routed screen — reachable only from seat 1's dropdown (see ProfilePicker's own doc for
 // why seat 2 can't host this: its zone is 180°-rotated in face-to-face mode, and the OS keyboard
@@ -13,30 +11,25 @@ import { useProfiles } from '@/hooks/useProfiles'
 // loadout.tsx — there's nothing left for that screen to thread through once this is its own
 // destination. Mirrors Pong's/AirHockey's identically-shaped app/profiles.tsx — createProfile here
 // takes just {name, color, tag}, since Snake's Profile is the package's own base type, unmodified.
-export default function ProfilesScreen() {
-  const { dark } = useAutoPaperTheme()
-  const bg = dark ? '#000000' : '#FFFFFF'
-  const fg = dark ? '#FFFFFF' : '#000000'
+// The container View, theme-derived bg/fg, back button, and commit-pending-edit-before-navigate
+// composition all now live inside @tastic/profile's own ProfilesScreen.
+export default function Profiles() {
   const { profiles, createProfile, updateProfile, deleteProfile } = useProfiles()
-  // See LightCycles' identical comment in app/profiles.tsx for why this ref/handler pair is needed
-  // — expo-router web keeps a popped screen mounted-but-hidden, so ProfilesManager's own
-  // unmount-flush fallback never fires here without it.
-  const managerRef = useRef<ProfilesManagerHandle>(null)
-
-  const handleBack = () => {
-    managerRef.current?.commitPendingEdit()
-    router.back()
-  }
+  // Only for wiring onDelete below — nothing else on this screen touches stats directly. Matches
+  // LightCycles' identical onDelete wiring in its own app/profiles.tsx.
+  const { removeProfileStats } = useGameStats()
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}>
-      <ProfilesManager ref={managerRef} profiles={profiles} defaultColor={defaultColors[0].value} onCreate={(patch) => createProfile(patch)} onSave={(id, patch) => updateProfile(id, patch)} onDelete={(id) => deleteProfile(id)} headerLeft={<IconButton icon='arrow-left' iconColor={fg} size={24} onPress={handleBack} accessibilityLabel='Back' />} />
-    </View>
+    <ProfilesScreen
+      profiles={profiles}
+      defaultColor={defaultColors[0].value}
+      onCreate={(patch) => createProfile(patch)}
+      onSave={(id, patch) => updateProfile(id, patch)}
+      onDelete={(id) => {
+        deleteProfile(id)
+        removeProfileStats(id)
+      }}
+      onBack={safeBack}
+    />
   )
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1
-  }
-})

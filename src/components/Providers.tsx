@@ -1,11 +1,9 @@
-import { Drawer } from '@rific/drawer'
-import { FeedbackPressProvider, hapticActions, type HapticSettings, soundActions, type SoundSettings } from '@rific/feedback-press'
+import { FeedbackPressProvider, hapticActions, type HapticSettings, soundActions, type SoundSettings, useFeedbackBridgeProps } from '@rific/feedback-press'
 import { scrollViewActions, type ScrollViewSettings, ScrollViewSettingsProvider } from '@rific/scroll-view'
-import { type HistoryContainerProps, HistoryModal, Toaster, ToastProvider } from '@rific/toaster'
+import { Toaster, ToastProvider } from '@rific/toaster'
 import { useEdgeGestureGuard } from '@tastic/edge-guard'
 import * as Haptics from 'expo-haptics'
 import React, { useCallback } from 'react'
-import { useWindowDimensions } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import * as RNPaper from 'react-native-paper'
@@ -20,15 +18,6 @@ import { Theme } from './Theme'
 
 export type ProvidersProps = { children: React.ReactNode }
 
-const HistoryDrawerContainer = ({ children, onClose, visible }: HistoryContainerProps) => {
-  const { height } = useWindowDimensions()
-  return (
-    <Drawer open={visible} onClose={onClose} side='bottom' height={height * 0.85}>
-      {children}
-    </Drawer>
-  )
-}
-
 const FeedbackBridge = ({ children }: ProvidersProps) => {
   const haptic = useSelector((state: RootState) => state.haptic)
   const sound = useSelector((state: RootState) => state.sound)
@@ -36,8 +25,9 @@ const FeedbackBridge = ({ children }: ProvidersProps) => {
   const onChange = useCallback((s: HapticSettings) => dispatch(hapticActions.initialize(s)), [dispatch])
   const onSoundChange = useCallback((s: SoundSettings) => dispatch(soundActions.initialize(s)), [dispatch])
   const { playClick, playPop } = useDefaultSounds()
+  const bridgeProps = useFeedbackBridgeProps({ initialValue: haptic, onChange, soundInitialValue: sound, onSoundChange, sound: { selection: playClick, notification: playPop } })
   return (
-    <FeedbackPressProvider initialValue={haptic} onChange={onChange} paper={RNPaper} soundInitialValue={sound} onSoundChange={onSoundChange} sound={{ selection: playClick, notification: playPop }}>
+    <FeedbackPressProvider {...bridgeProps} paper={RNPaper}>
       {children}
     </FeedbackPressProvider>
   )
@@ -80,7 +70,13 @@ export const Providers = ({ children }: ProvidersProps) => {
                     <Theme>
                       <ToastProvider haptics={Haptics} paper={RNPaper}>
                         {children}
-                        <Toaster historyModal={<HistoryModal Container={HistoryDrawerContainer} />} />
+                        {/* historyButton/clearButton off — matches AirHockey/BoxHockey/Pong/LightCycles;
+                        limit is already the package's own default (3), pinned explicitly so it stays 3
+                        regardless of what that default does in a future toaster version. No historyModal
+                        — Snake's own history drawer (@rific/drawer-backed) was unreachable dead code now
+                        that historyButton is hidden and nothing calls useToast().openHistory(); removed
+                        along with the @rific/drawer dependency itself. */}
+                        <Toaster historyButton={null} clearButton={null} limit={3} />
                       </ToastProvider>
                     </Theme>
                   </KeyboardProvider>

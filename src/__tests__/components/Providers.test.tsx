@@ -12,7 +12,9 @@ jest.mock('@rific/auto-paper', () => ({
     (initialState: unknown) =>
     (state = { appearance: 'system', blur: true, harmony: 'split-complementary', ...(initialState as object) }) =>
       state,
-  getThirdColor: () => '#6122c8'
+  getThirdColor: () => '#6122c8',
+  // Real useThemeBridgeProps just repackages its own argument into the same shape it's given.
+  useThemeBridgeProps: (p: any) => p
 }))
 
 jest.mock('@rific/feedback-press', () => ({
@@ -23,11 +25,15 @@ jest.mock('@rific/feedback-press', () => ({
     return props.children
   },
   hapticReducer: (state = { vibrate: true }) => state,
-  soundReducer: (state = { enabled: true }) => state
+  soundReducer: (state = { enabled: true }) => state,
+  // The real hook is a pure passthrough/memoize over its own arg (see @rific/feedback-press' own
+  // useFeedbackBridgeProps) — an identity function reproduces that here, so Providers.tsx's
+  // `<FeedbackPressProvider {...bridgeProps}>` still receives initialValue/soundInitialValue
+  // unchanged, exactly as it did before Providers.tsx called this hook.
+  useFeedbackBridgeProps: (props: any) => props
 }))
 
 jest.mock('@rific/toaster', () => ({
-  HistoryModal: () => null,
   Toaster: () => null,
   ToastProvider: (props: any) => props.children
 }))

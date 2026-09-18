@@ -1,4 +1,4 @@
-import { useToast } from '@rific/toaster'
+import { useUpdateErrorToast } from '@rific/toaster'
 import type { ViewRotation } from '@tastic/core'
 import { BaseSettingsDialog } from '@tastic/hud'
 import { useDispatch, useSelector } from 'react-redux'
@@ -35,7 +35,7 @@ export function SettingsDialog({ visible, onDismiss, rotation = 0 }: SettingsDia
   const dispatch = useDispatch()
   const lockOrientation = useSelector((state: RootState) => state.game.lockOrientation)
   const deferBottomEdgeGestures = useSelector((state: RootState) => state.game.deferBottomEdgeGestures)
-  const { error } = useToast()
+  const onUpdateError = useUpdateErrorToast()
 
-  return <BaseSettingsDialog visible={visible} onDismiss={onDismiss} rotation={rotation} version={release.otaVersion} lockOrientation={lockOrientation} onLockOrientationChange={(value) => dispatch(gameActions.setLockOrientation(value))} deferBottomEdgeGestures={deferBottomEdgeGestures} onDeferBottomEdgeGestures={(value) => dispatch(gameActions.setDeferBottomEdgeGestures(value))} onUpdateError={(message) => error('Update check failed', message)} />
+  return <BaseSettingsDialog visible={visible} onDismiss={onDismiss} rotation={rotation} version={release.otaVersion} lockOrientation={lockOrientation} onLockOrientationChange={(value) => dispatch(gameActions.setLockOrientation(value))} deferBottomEdgeGestures={deferBottomEdgeGestures} onDeferBottomEdgeGestures={(value) => dispatch(gameActions.setDeferBottomEdgeGestures(value))} onUpdateError={onUpdateError} />
 }

@@ -1,41 +1,33 @@
-import { getViewRotation, OrientationProvider, useOrientationState } from '@tastic/core'
+import { useAutoPaperTheme } from '@rific/auto-paper'
+import { OrientationProvider, RotationAwareStatusBar, useThemedRootBackground } from '@tastic/core'
 import { Stack } from 'expo-router'
 import { DeviceMotion } from 'expo-sensors'
 import * as SplashScreen from 'expo-splash-screen'
-import { StatusBar } from 'expo-status-bar'
+import { useSelector } from 'react-redux'
 
 import { Providers } from '@/components/Providers'
 import { UpdateDialog } from '@/components/UpdateDialog'
 import { GameStatsProvider } from '@/hooks/useGameStats'
 import { ProfilesProvider } from '@/hooks/useProfiles'
+import type { RootState } from '@/redux/store'
 
 SplashScreen.preventAutoHideAsync()
-SplashScreen.setOptions({ duration: 500, fade: true })
-
-// Hides the OS status bar whenever content elsewhere is visually rotated (see @tastic/core's
-// getViewRotation/@tastic/split-screen's FakeLandscapeView) — matches BoxHockey's/LightCycles'/
-// AirHockey's identical RotationAwareStatusBar. /game additionally hides it unconditionally
-// regardless (see its own <StatusBar hidden />), so this only actually matters on /index,
-// /loadout, and /profiles.
-function RotationAwareStatusBar() {
-  const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
-  const rotation = getViewRotation(orientationMode, p1OnRight, upsideDown)
-  return <StatusBar hidden={rotation !== 0} />
-}
+SplashScreen.setOptions({ fade: true, duration: 400 })
 
 const RootNavigator = () => {
+  const { dark } = useAutoPaperTheme()
   return (
     <Stack
-      screenOptions={{
-        headerShown: false,
+      screenOptions={useThemedRootBackground(
+        dark,
         // gestureEnabled: false — iOS's native swipe-back gesture otherwise fights
         // TouchInputLayer's own swipe-to-turn Pan gestures on /game. Same rationale as
         // LightCycles' root _layout.tsx (confirmed there on-device): the OS gesture wins,
         // silently kicking the player back to the title screen mid-round instead of turning
         // their snake. The title screen has nothing to swipe back to either way, and /game's
         // own game-over dialog is the way back out once a round ends.
-        gestureEnabled: false
-      }}
+        false
+      )}
     >
       {/* (tabs) removed — that group's directory was already deleted in an earlier phase, and
       this app has no tab bar; its real screens are the title screen, the loadout screen (1
@@ -46,6 +38,25 @@ const RootNavigator = () => {
       <Stack.Screen name='profiles' />
     </Stack>
   )
+}
+
+// A sibling of the navigator, not a wrapper around it — needs its own component (rather than
+// reading state.game.lockOrientation directly in RootLayout below) so useSelector runs INSIDE
+// Providers' own <ReduxProvider>, not above it: RootLayout itself renders <Providers>, so a hook
+// call in RootLayout's own body would run before that Redux context exists at all.
+//
+// Hides the OS status bar whenever content elsewhere is visually rotated (see @tastic/core's
+// getViewRotation/@tastic/split-screen's FakeLandscapeView) — matches BoxHockey's/LightCycles'/
+// AirHockey's identical use of @tastic/core's own shared RotationAwareStatusBar. /game
+// additionally hides it unconditionally regardless (see its own <StatusBar hidden />), so this
+// only actually matters on /index, /loadout, and /profiles. Reads state.game.lockOrientation the
+// same way game.tsx's/loadout.tsx's own useOrientationState calls do, so this bar's hidden/shown
+// state always matches whatever rotation the visible content is actually locked to — omitting
+// `locked` would default to false (never locked) and could diverge from content that's
+// deliberately ignoring live tilt with Lock Orientation on.
+function AppRotationAwareStatusBar() {
+  const lockOrientation = useSelector((state: RootState) => state.game.lockOrientation)
+  return <RotationAwareStatusBar locked={lockOrientation} />
 }
 
 const RootLayout = () => {
@@ -85,7 +96,7 @@ const RootLayout = () => {
             <RootNavigator />
           </ProfilesProvider>
         </GameStatsProvider>
-        <RotationAwareStatusBar />
+        <AppRotationAwareStatusBar />
       </OrientationProvider>
     </Providers>
   )

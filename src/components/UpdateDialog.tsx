@@ -1,4 +1,4 @@
-import { useToast } from '@rific/toaster'
+import { useUpdateErrorToast } from '@rific/toaster'
 import { UpdateDialog as SharedUpdateDialog } from '@tastic/hud'
 
 // Thin bridge onto the fleet-shared @tastic/hud UpdateDialog, which owns the useUpdater() instance,
@@ -8,6 +8,6 @@ import { UpdateDialog as SharedUpdateDialog } from '@tastic/hud'
 // so this app's own onError -> toast wiring has one place to live. Same shape as BoxHockey's,
 // Pong's, AirHockey's, and Solitaire's own src/components/UpdateDialog.tsx.
 export function UpdateDialog() {
-  const { error } = useToast()
-  return <SharedUpdateDialog onError={(message) => error('Update check failed', message)} />
+  const onError = useUpdateErrorToast()
+  return <SharedUpdateDialog onError={onError} />
 }
