@@ -5,6 +5,7 @@ import { DeviceMotion } from 'expo-sensors'
 import * as SplashScreen from 'expo-splash-screen'
 import { useSelector } from 'react-redux'
 
+import { GuideHost } from '@/components/GuideHost'
 import { Providers } from '@/components/Providers'
 import { UpdateDialog } from '@/components/UpdateDialog'
 import { GameStatsProvider } from '@/hooks/useGameStats'
@@ -93,7 +94,15 @@ const RootLayout = () => {
         /loadout included) sits inside that gate instead. */}
         <GameStatsProvider>
           <ProfilesProvider>
-            <RootNavigator />
+            {/* Wraps the navigator (rather than sitting beside it like UpdateDialog above) because
+            Home's useAutoShowGuide() and the Home/loadout Settings dialogs' "How to Play" row reach
+            it through context (see GuideHost's own doc). Must stay inside Providers (Redux, the
+            Paper theme whose Portal the card renders through) and OrientationProvider (it reads the
+            live tilt to rotate the card), and inside ProfilesProvider's 'profiles' gate so it mounts
+            together with Home rather than before it. */}
+            <GuideHost>
+              <RootNavigator />
+            </GuideHost>
           </ProfilesProvider>
         </GameStatsProvider>
         <AppRotationAwareStatusBar />

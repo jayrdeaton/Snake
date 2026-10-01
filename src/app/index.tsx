@@ -1,6 +1,7 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { Button, IconButton } from '@rific/feedback-press'
 import { FakeLandscapeView, rotateInsets, useRotation } from '@tastic/core'
+import { useAutoShowGuide } from '@tastic/hud/guide'
 import { router } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
@@ -31,6 +32,10 @@ export default function HomeScreen() {
   const insets = rotateInsets(useSafeAreaInsets(), rotation)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // First launch only (and once per session): opens the how-to-play cards over this screen. Called
+  // here and nowhere else so it can never fire over a live match or a two-seat loadout: Home is the
+  // one screen with a single reader, before any seating. See GuideHost / @tastic/hud/guide.
+  useAutoShowGuide()
 
   // Both routes go through /loadout now — 1 Player's own CPU difficulty (including "None", Snake's
   // genuine no-opponent solo mode) is picked there, in the same per-seat slot 2 Player already uses
@@ -70,7 +75,7 @@ export default function HomeScreen() {
         </View>
       </FakeLandscapeView>
 
-      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={rotation} />
+      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={rotation} showHowToPlay />
     </View>
   )
 }

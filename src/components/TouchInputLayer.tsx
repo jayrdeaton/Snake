@@ -143,10 +143,9 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
 
   // Face-to-face: top/bottom split (snake 1 = near/bottom zone, since snake 1 is assumed to be the
   // device's owner and the near zone faces them; snake 2 = far/top zone). Side-by-side: whichever
-  // seat is on the right (see useOrientationState) gets the right zone. Used as-is for both
-  // Vs CPU (only the near/bottom zone is actually listened to by the caller — there's no second
-  // human — though this component doesn't need to know that, it just always renders both zones) and
-  // 2 Player (both zones are live).
+  // seat is on the right (see useOrientationState) gets the right zone. Only 2 Player lands here:
+  // game.tsx picks the mode from the number of humans, so Solo and Vs CPU (one human each) both use
+  // the single full-board zone above, matching LightCycles' TouchInputLayer.
   const isFaceToFace = orientationMode === 'faceToFace'
   const snake1ZoneStyle = isFaceToFace ? styles.zoneBottom : p1OnRight ? styles.zoneRight : styles.zoneLeft
   const snake2ZoneStyle = isFaceToFace ? styles.zoneTop : p1OnRight ? styles.zoneLeft : styles.zoneRight

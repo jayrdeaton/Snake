@@ -4,7 +4,7 @@ import { useToast } from '@rific/toaster'
 import { broadcastDeviceUnlocks } from '@tastic/achievements'
 import { computeContentBounds, FakeLandscapeView, getFixedZoneRotation, getViewRotation, rotateInsets, useOrientationState, useSettledWindowDimensions } from '@tastic/core'
 import { computeGridSize } from '@tastic/grid'
-import { ConfirmDialog, useQuitConfirmation } from '@tastic/hud'
+import { type AchievementUnlockOwner, ConfirmDialog, useQuitConfirmation } from '@tastic/hud'
 import { needsSharedNeutralZone } from '@tastic/split-screen'
 import { useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -85,8 +85,8 @@ export default function GameScreen() {
   const cpuDifficulty = useSelector((state: RootState) => state.game.cpuDifficulty) ?? 'normal'
   const controlScheme = useSelector((state: RootState) => state.game.controlScheme)
   const { recordRoundOutcome, stats } = useGameStats()
-  const { lastSelected } = useProfiles()
-  const { success: showAchievementToast } = useToast()
+  const { lastSelected, profiles } = useProfiles()
+  const { clear: clearToasts, success: showAchievementToast } = useToast()
   const dispatch = useDispatch()
 
   // Bundled once via useMemo — see types/index.ts's own SnakeRoundSettings comment for why this is
@@ -138,14 +138,13 @@ export default function GameScreen() {
     [state.snakes]
   )
 
-  // Vs CPU: only the near/bottom zone (snake 1, the human) is ever wired to actually turn a
-  // snake here — the far/top zone still renders (TouchInputLayer's 'dual' mode always mounts both
-  // GestureDetectors, since it has no notion of which game mode is active) but any turn it
-  // reports is dropped, since the CPU splice inside useSnakeState already drives snake 2's
-  // pendingDirection every tick; wiring the far zone to `turn(2, ...)` too would have human input
-  // and the CPU fighting over the same seat. 2 Player forwards both zones as-is. Solo only ever
-  // receives snakeId 1 in the first place (TouchInputLayer's 'solo' mode has just one zone). See
-  // useSnakeState.ts's own module comment for the full responsibility split this mirrors.
+  // Vs CPU: snake 2 is never human-steered. Solo and Vs CPU both run TouchInputLayer's 'solo'
+  // mode (one full-board zone that only ever reports snakeId 1, see touchMode below), and
+  // KeyboardInputLayer only maps humanPlayers' keys, so nothing should report snake 2 here. The
+  // guard stays as a backstop: the CPU splice inside useSnakeState already drives snake 2's
+  // pendingDirection every tick, and a stray `turn(2, ...)` would have human input and the CPU
+  // fighting over the same seat. 2 Player forwards both zones as-is. See useSnakeState.ts's own
+  // module comment for the full responsibility split this mirrors.
   const handleTurn = useCallback(
     (snakeId: SnakeId, direction: Direction) => {
       if (mode === 'vsCpu' && snakeId !== 1) return
@@ -159,10 +158,11 @@ export default function GameScreen() {
   const { playGameOver, playActivate, playPickup } = useSnakeSounds()
 
   // Same vsCpu seat-gating as handleTurn above, for the identical reason: the CPU splice inside
-  // useSnakeState already decides snake 2's own activation every tick, so a stray activate(2) from
-  // the far zone's still-mounted (but unused) gesture must never reach it. Only plays the activate
-  // sound for a MEANINGFUL activation (the seat actually had something held) — a bare tap with
-  // nothing to use is silent, matching how a no-op activation already produces no visible effect.
+  // useSnakeState already decides snake 2's own activation every tick, so a stray activate(2) must
+  // never reach it (a backstop, as above: no Vs CPU input source reports seat 2). Only plays the
+  // activate sound for a MEANINGFUL activation (the seat actually had something held): a bare tap
+  // with nothing to use is silent, matching how a no-op activation already produces no visible
+  // effect.
   const handleActivate = useCallback(
     (snakeId: SnakeId) => {
       if (mode === 'vsCpu' && snakeId !== 1) return
@@ -198,13 +198,19 @@ export default function GameScreen() {
     [state.snakes]
   )
 
-  const touchMode: TouchInputMode = mode === 'solo' ? 'solo' : 'dual'
-
   // Solo/Vs CPU: only seat 1 is human (Vs CPU's seat 2 is the CPU, driven by the splice inside
   // useSnakeState). 2 Player: both. KeyboardInputLayer's own web-only listener uses this to know
-  // which seats' control schemes to even look up — mirrors touchMode's identical mode-based split
-  // just above, as the seat list rather than a zone-layout mode.
+  // which seats' control schemes to even look up, and touchMode below derives from it.
   const humanPlayers: SnakeId[] = useMemo(() => (mode === 'twoPlayer' ? [1, 2] : [1]), [mode])
+
+  // Keyed off the number of HUMANS, not snakes: a lone human (Solo or Vs CPU) gets the whole board
+  // as one swipe/drag zone, and only 2 Player splits it into per-seat halves. Mirrors LightCycles'
+  // TouchInputLayer (`solo = humanPlayers.length === 1`) and OnboardingOverlay's identical
+  // humanPlayers-gated branch, whose full-board Vs CPU countdown tint now matches where a swipe
+  // actually registers. This used to be `mode === 'solo'`, which gave Vs CPU the two-seat split
+  // and silently dropped every swipe or drag that started in the CPU's half (2026-09-24, found
+  // while writing the how-to-play guide's "Your snake turns the way you swipe").
+  const touchMode: TouchInputMode = humanPlayers.length === 1 ? 'solo' : 'dual'
 
   // Snake 1 is always the human in every mode (solo's only snake, or Vs CPU's human seat); snake
   // 2 is the CPU in Vs CPU or the second human in 2 Player. See snakeEngine.ts's own spawn
@@ -362,6 +368,13 @@ export default function GameScreen() {
     }
   }, [phase, dispatch])
 
+  // No toast may stay on screen during live play — only between rounds or at game over. Unlock
+  // toasts fire at game over and last 7s, so a quick Retry would otherwise carry them past the
+  // countdown into the next round.
+  useEffect(() => {
+    if (phase === 'playing') clearToasts()
+  }, [phase, clearToasts])
+
   // SettingsDialog and GameOverDialog are both a single centered card with no second seat's zone to
   // stay neutral for (see each one's own doc) — getViewRotation, not getFixedZoneRotation, so a
   // portrait upside-down hold repositions/flips them too instead of being silently ignored, same as
@@ -387,6 +400,12 @@ export default function GameScreen() {
   const { dark } = useAutoPaperTheme()
   const bg = dark ? '#000000' : '#FFFFFF'
   const fgMuted = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'
+  // Marks each seat's rows in GameOverDialog's 2 Player unlock list: the seat's profile if one is
+  // selected, else a plain avatar in that snake's color.
+  const achievementOwners: Record<SnakeId, AchievementUnlockOwner> = {
+    1: { profile: profiles.find((p) => p.id === lastSelected[1]), color: state.snakes[0]?.color ?? fgMuted },
+    2: { profile: profiles.find((p) => p.id === lastSelected[2]), color: state.snakes[1]?.color ?? fgMuted }
+  }
 
   // state.grid is already the round's own frozen design resolution — createInitialSnakeState only
   // ever runs again on retry (see useSnakeState.ts), so every snake body/food coordinate laid down
@@ -439,7 +458,7 @@ export default function GameScreen() {
 
       {phase === 'onboarding' && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} lockOrientation={lockOrientation} />}
 
-      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(viewerStats.byMode[mode].bestScore, recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} achievementUnlocks={mode === 'twoPlayer' ? achievementUnlocks : undefined} rotation={overlayRotation} />}
+      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(viewerStats.byMode[mode].bestScore, recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} achievementUnlocks={mode === 'twoPlayer' ? achievementUnlocks : undefined} achievementOwners={achievementOwners} rotation={overlayRotation} />}
 
       {/* Kept as its own sibling of the board/gesture tree above, mirroring LightCycles'/BoxHockey's
       identically-motivated MatchOverlays split — this live tilt subscription's re-renders should

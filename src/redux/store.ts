@@ -3,12 +3,14 @@ import { combineReducers, configureStore, type Middleware } from '@reduxjs/toolk
 import { createThemeReducer, getThirdColor } from '@rific/auto-paper'
 import { defaultSoundSettings, hapticReducer, soundReducer, type SoundSettings } from '@rific/feedback-press'
 import { scrollViewReducer } from '@rific/scroll-view'
+import { createReturningPlayerMigrate } from '@tastic/hud/guide'
 import { profilesReducer } from '@tastic/profile'
 import { FLUSH, PAUSE, PERSIST, persistReducer, persistStore, PURGE, REGISTER, REHYDRATE } from 'redux-persist'
 
 import { SNAKE_COLORS } from '@/utils/snakeEngine'
 
 import game from './gameSlice'
+import guide, { LEGACY_STORAGE_KEYS } from './guideSlice'
 import liveplay from './liveplaySlice'
 import profileSelection from './profileSelectionSlice'
 import settings from './settingsSlice'
@@ -55,7 +57,13 @@ const rootReducer = combineReducers({
   // is what gives it local-fallback behavior for the platforms/builds where the shared store isn't
   // available, with no separate hand-rolled AsyncStorage path needed for that case.
   profiles: profilesReducer,
-  profileSelection
+  profileSelection,
+  // Which version of the how-to-play flow this player has finished or skipped, as its own key rather
+  // than a gameSlice field: gameSlice's REHYDRATE merge backfills any missing field from
+  // defaultGameState, which would hand an existing player "never seen" and show them the guide after
+  // an update, while this slice stamps them as seen instead. Persisted like every key here (only
+  // liveplay is blacklisted below). See guideSlice.ts's own doc.
+  guide
 })
 
 const persistConfig = {
@@ -64,6 +72,10 @@ const persistConfig = {
   // liveplay is the one slice that must never survive a rehydrate — see its own doc comment.
   // Every other slice here is a genuine persisted preference/record.
   blacklist: ['liveplay'],
+  // A player with no root store but a key an earlier shipped build wrote (see LEGACY_STORAGE_KEYS)
+  // is rehydrated as a returning player, so the guide slice grandfathers them instead of treating
+  // them as a fresh install. An existing root store passes through untouched.
+  migrate: createReturningPlayerMigrate(AsyncStorage, LEGACY_STORAGE_KEYS),
   // redux-persist defaults `timeout` to 5000ms: a failsafe setTimeout scheduled on every PERSIST
   // dispatch to force-resolve rehydrate if storage never responds. It's never cleared once
   // rehydrate resolves normally (only guarded by an internal `_sealed` flag), so it sits as a

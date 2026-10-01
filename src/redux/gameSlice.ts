@@ -64,8 +64,10 @@ export type GameSliceState = {
   // shared with every other @tastic game, so a seat's scheme instead just remembers per-seat like
   // lastGuestColor does, independent of whichever profile (if any) is selected there. Defaults keep
   // the two seats on different values (mirroring LightCycles' own asymmetric {1:'wasd',2:'arrows'}
-  // default) since seat 1 and seat 2 can share one desktop's keyboard/mouse — see PlayerSetupPanel's
-  // otherControlScheme/takenValue wiring, which keeps them that way once /loadout is reachable.
+  // default) since seat 1 and seat 2 can share one desktop's keyboard/mouse. setControlScheme below
+  // keeps them that way: picking the other seat's scheme swaps the two (LightCycles' lobby does the
+  // same), which matters in 1 Player, where /loadout shows only seat 1's picker and passes it no
+  // takenValue.
   controlScheme: Record<SnakeId, ControlScheme>
   // Per-round tick speed — mirrors LightCycles' SpeedTier (see constants/snake.ts's
   // SNAKE_SPEED_TIER_INTERVAL_MS). Lives here, not a separate settings object, same "one persisted-
@@ -118,10 +120,18 @@ const slice = createSlice({
       ...state,
       profileOverride: { ...state.profileOverride, [action.payload.seat]: action.payload.color }
     }),
-    setControlScheme: (state, action: PayloadAction<{ seat: SnakeId; scheme: ControlScheme }>) => ({
-      ...state,
-      controlScheme: { ...state.controlScheme, [action.payload.seat]: action.payload.scheme }
-    }),
+    // Swap-on-conflict, the same shape as LightCycles' lobby handleP1KeySchemeChange/
+    // handleP2KeySchemeChange: picking the scheme the other seat already has hands that seat this
+    // seat's old one. In 2 Player the picker disables the other seat's scheme (takenValue), so this
+    // only fires from 1 Player, where seat 2's picker is hidden. Without it, a 1 Player pick of
+    // seat 2's saved scheme (WASD by default) left both seats on it, and in a later 2 Player game
+    // KeyboardInputLayer sent every one of those keys to seat 1.
+    setControlScheme: (state, action: PayloadAction<{ seat: SnakeId; scheme: ControlScheme }>) => {
+      const { seat, scheme } = action.payload
+      const other: SnakeId = seat === 1 ? 2 : 1
+      const otherScheme = state.controlScheme[other] === scheme ? state.controlScheme[seat] : state.controlScheme[other]
+      return { ...state, controlScheme: { [seat]: scheme, [other]: otherScheme } as Record<SnakeId, ControlScheme> }
+    },
     setSpeedTier: (state, action: PayloadAction<SnakeSpeedTier>) => ({ ...state, speedTier: action.payload }),
     setArenaVariant: (state, action: PayloadAction<SnakeArenaVariant>) => ({ ...state, arenaVariant: action.payload }),
     setEnabledPowerups: (state, action: PayloadAction<SnakePowerupType[]>) => ({ ...state, enabledPowerups: action.payload }),

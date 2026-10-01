@@ -360,10 +360,11 @@ export default function LoadoutScreen() {
   const humanPlayers: SnakeId[] = useMemo(() => (p2IsHuman ? [1, 2] : [1]), [p2IsHuman])
   const [ready, setReady] = useState<Record<SnakeId, boolean>>({ 1: false, 2: false })
 
-  // Every time this screen (re)gains focus — first arrival from the title screen, or coming back
-  // here via the post-game "Loadout" button — Ready starts false again. Without this, popping back
-  // to an already-mounted loadout whose players both left it Ready would immediately re-trigger the
-  // all-ready effect below and bounce straight back into /game.
+  // Every time this screen (re)gains focus (first arrival from the title screen, or coming back
+  // here via the post-game "Quit" button, GameOverDialog's onHome, a safeBack), Ready starts false
+  // again. Without this, popping back to an already-mounted loadout whose players both left it
+  // Ready would immediately re-trigger the all-ready effect below and bounce straight back into
+  // /game.
   useFocusEffect(
     useCallback(() => {
       setReady({ 1: false, 2: false })
@@ -571,7 +572,7 @@ export default function LoadoutScreen() {
         )}
       </FakeLandscapeView>
 
-      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={rotation} />
+      <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={rotation} showHowToPlay />
     </View>
   )
 }
