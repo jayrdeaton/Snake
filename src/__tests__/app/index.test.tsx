@@ -10,7 +10,7 @@ import gameReducer, { defaultGameState, type GameSliceState } from '../../redux/
 // index.tsx is the real home screen (animated hero title, 1 Player/2 Player buttons, settings
 // gear). HeroTitle's own letter/loop animation is Skia/Reanimated-heavy and has no testable
 // behavior relevant to index.tsx's own logic, so it's mocked to a trivial stand-in here — same
-// narrow, test-file-local override convention as _not-found.test.tsx's own expo-router mock.
+// narrow, test-file-local override convention as +not-found.test.tsx's own expo-router mock.
 jest.mock('@/components/HeroTitle', () => ({ HeroTitle: () => null }))
 
 jest.mock('expo-router', () => ({
