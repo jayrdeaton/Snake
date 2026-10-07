@@ -1,15 +1,17 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
-import { OrientationProvider, RotationAwareStatusBar, useThemedRootBackground } from '@tastic/core'
+import { type OrientationLockSettings, OrientationProvider, RotationAwareStatusBar, useThemedRootBackground } from '@tastic/core'
 import { Stack } from 'expo-router'
 import { DeviceMotion } from 'expo-sensors'
 import * as SplashScreen from 'expo-splash-screen'
-import { useSelector } from 'react-redux'
+import { type ReactNode, useCallback } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 
 import { GuideHost } from '@/components/GuideHost'
 import { Providers } from '@/components/Providers'
 import { UpdateDialog } from '@/components/UpdateDialog'
 import { GameStatsProvider } from '@/hooks/useGameStats'
 import { ProfilesProvider } from '@/hooks/useProfiles'
+import { gameActions } from '@/redux/gameSlice'
 import type { RootState } from '@/redux/store'
 
 SplashScreen.preventAutoHideAsync()
@@ -41,23 +43,38 @@ const RootNavigator = () => {
   )
 }
 
-// A sibling of the navigator, not a wrapper around it — needs its own component (rather than
-// reading state.game.lockOrientation directly in RootLayout below) so useSelector runs INSIDE
-// Providers' own <ReduxProvider>, not above it: RootLayout itself renders <Providers>, so a hook
-// call in RootLayout's own body would run before that Redux context exists at all.
+// Needs its own component (rather than reading state.game directly in RootLayout below) so
+// useSelector runs INSIDE Providers' own <ReduxProvider>, not above it: RootLayout itself renders
+// <Providers>, so a hook call in RootLayout's own body would run before that Redux context exists at
+// all. Inside Providers also means inside its PersistGate, so the persisted lock is already
+// rehydrated by the time this mounts.
 //
-// Hides the OS status bar whenever content elsewhere is visually rotated (see @tastic/core's
-// getViewRotation/@tastic/split-screen's FakeLandscapeView) — matches BoxHockey's/LightCycles'/
-// AirHockey's identical use of @tastic/core's own shared RotationAwareStatusBar. /game
-// additionally hides it unconditionally regardless (see its own <StatusBar hidden />), so this
-// only actually matters on /index, /loadout, and /profiles. Reads state.game.lockOrientation the
-// same way game.tsx's/loadout.tsx's own useOrientationState calls do, so this bar's hidden/shown
-// state always matches whatever rotation the visible content is actually locked to — omitting
-// `locked` would default to false (never locked) and could diverge from content that's
-// deliberately ignoring live tilt with Lock Orientation on.
-function AppRotationAwareStatusBar() {
+// Lock Orientation is app-wide. freezeWhileLocked makes @tastic/core freeze its one shared
+// orientation reading while the lock is on, so every consumer (each screen's useOrientationState/
+// useRotation and FakeLandscapeView, the board, touch input, overlays, @tastic/hud's dialogs and
+// RotationAwareStatusBar below) holds the same angle, including anything that mounts after the lock;
+// no call site is handed the flag. While locked, core records the held angle as `rotation` and
+// reports it through onLockChange (cleared on unlock); persisting it as lockedRotation and handing it
+// back through lockInitialValue is what makes a locked relaunch open in that orientation from the
+// first frame instead of portrait. The Settings dialog's toggle still just dispatches
+// setLockOrientation: the provider adopts the changed lockInitialValue and reports the result back
+// through onLockChange like any other lock change.
+function OrientationBridge({ children }: { children: ReactNode }) {
   const lockOrientation = useSelector((state: RootState) => state.game.lockOrientation)
-  return <RotationAwareStatusBar locked={lockOrientation} />
+  const lockedRotation = useSelector((state: RootState) => state.game.lockedRotation)
+  const dispatch = useDispatch()
+  const onLockChange = useCallback(
+    (next: OrientationLockSettings) => {
+      dispatch(gameActions.setLockOrientation(next.locked))
+      dispatch(gameActions.setLockedRotation(next.rotation))
+    },
+    [dispatch]
+  )
+  return (
+    <OrientationProvider deviceMotion={DeviceMotion} freezeWhileLocked lockInitialValue={{ locked: lockOrientation, rotation: lockedRotation }} onLockChange={onLockChange}>
+      {children}
+    </OrientationProvider>
+  )
 }
 
 const RootLayout = () => {
@@ -71,21 +88,22 @@ const RootLayout = () => {
       hard no-op on web); this renders a themed ConfirmDialog instead, via @tastic/hud's own
       UpdateDialog, which now owns the useUpdater() instance end to end. */}
       <UpdateDialog />
-      {/* Mounted once, here, above the navigator — not inside Providers.tsx itself. Providers.tsx
-      is the generic, game-agnostic Expo-Starter provider stack (Redux/theme/feedback/scroll-view)
-      that a future non-split-screen spinoff from the same starter would still want as-is;
-      OrientationProvider is specific to this app's face-to-face/side-by-side Vs CPU and 2 Player
-      modes, so it lives alongside the navigator it actually serves instead of inside that shared
-      abstraction. Matches LightCycles' own root _layout.tsx, which mounts it the same way for the
-      same reason: a single app-lifetime sensor subscription is what makes the committed
-      orientation survive screen navigation (index -> game and back), instead of each screen's own
-      hook instance restarting from a default guess on every mount. */}
+      {/* OrientationProvider (via OrientationBridge above) is mounted once, here, above the
+      navigator, not inside Providers.tsx itself. Providers.tsx is the generic, game-agnostic
+      Expo-Starter provider stack (Redux/theme/feedback/scroll-view) that a future non-split-screen
+      spinoff from the same starter would still want as-is; OrientationProvider is specific to
+      this app's face-to-face/side-by-side Vs CPU and 2 Player modes, so it lives alongside the
+      navigator it actually serves instead of inside that shared abstraction. Matches LightCycles'
+      own root _layout.tsx, which mounts it the same way for the same reason: a single app-lifetime
+      sensor subscription is what makes the committed orientation survive screen navigation (index
+      -> game and back), instead of each screen's own hook instance restarting from a default guess
+      on every mount. */}
       {/* @tastic/core's own OrientationProvider never imports expo-sensors itself — a real
       top-level import there would force every consumer of the package (even one with zero
       interest in tilt tracking) to have expo-sensors installed, or Metro fails to resolve it.
       This app genuinely wants live tilt tracking, so it does its own real import and hands the
-      resolved module in via this prop. */}
-      <OrientationProvider deviceMotion={DeviceMotion}>
+      resolved module in via OrientationBridge's deviceMotion prop. */}
+      <OrientationBridge>
         {/* GameStatsProvider wraps ProfilesProvider, not the other way around, so its own
         AsyncStorage-backed achievements/stats load starts immediately and independently — it has
         no lazy-initializer race of its own to guard against (see useGameStats.tsx), so it must
@@ -98,15 +116,21 @@ const RootLayout = () => {
             Home's useAutoShowGuide() and the Home/loadout Settings dialogs' "How to Play" row reach
             it through context (see GuideHost's own doc). Must stay inside Providers (Redux, the
             Paper theme whose Portal the card renders through) and OrientationProvider (it reads the
-            live tilt to rotate the card), and inside ProfilesProvider's 'profiles' gate so it mounts
+            shared orientation reading to rotate the card), and inside ProfilesProvider's 'profiles' gate so it mounts
             together with Home rather than before it. */}
             <GuideHost>
               <RootNavigator />
             </GuideHost>
           </ProfilesProvider>
         </GameStatsProvider>
-        <AppRotationAwareStatusBar />
-      </OrientationProvider>
+        {/* Hides the OS status bar whenever content elsewhere is visually rotated (see
+        @tastic/core's getViewRotation/FakeLandscapeView), matching BoxHockey's/LightCycles'/
+        AirHockey's use of the same shared component. /game additionally hides it unconditionally
+        (see its own <StatusBar hidden />), so this only actually matters on /index, /loadout,
+        /achievements and /profiles. It reads the same shared reading as the visible content, which
+        OrientationBridge freezes while Lock Orientation is on, so the two can't disagree. */}
+        <RotationAwareStatusBar />
+      </OrientationBridge>
     </Providers>
   )
 }

@@ -1199,11 +1199,13 @@ function wallPath(grid: GridSize, cellPx: number, orientationMode: OrientationMo
 // actually live, and it visually clutters the countdown's own player-zone overlay
 // (OnboardingOverlay.tsx).
 function Walls({ snakes, grid, cellPx, wrapEdges, onboarding }: { snakes: SnakeEntity[]; grid: GridSize; cellPx: number; wrapEdges: boolean; onboarding: boolean }) {
-  // Live, not frozen — unlike LightCycles' board (always fixed 'faceToFace', see that app's own
-  // GameScreen comment on why), Snake's genuinely supports side-by-side too and already re-renders
-  // this subtree live on every tilt sample via TouchInputLayer's own identical subscription (see
-  // that file's own header comment), so reading it here again doesn't introduce any new re-render
-  // cost this board wasn't already paying.
+  // Follows the shared orientation reading rather than a fixed layout (frozen only while Lock
+  // Orientation is on, app-wide, by _layout.tsx's OrientationProvider, same as TouchInputLayer's
+  // zones, so the two can't disagree): unlike LightCycles' board (always fixed 'faceToFace', see
+  // that app's own GameScreen comment on why), Snake's genuinely supports side-by-side too and
+  // already re-renders this subtree live on every tilt sample via TouchInputLayer's own identical
+  // subscription (see that file's own header comment), so reading it here again doesn't introduce
+  // any new re-render cost this board wasn't already paying.
   const { orientationMode, p1OnRight } = useOrientationState()
   if (wrapEdges || onboarding) return null
 

@@ -25,10 +25,6 @@ export interface OnboardingOverlayProps {
   // color only actually gets used below when humanPlayers.length is 2 — i.e. Vs CPU's own CPU-
   // colored zone is simply never rendered, matching the single-zone branch not needing it).
   colors: { snake1: string; snake2?: string }
-  // Only consulted in the solo/vsCpu branch below (humanPlayers.length === 1) — the two-player
-  // branch has no lock concept of its own, same reasoning as GameActionChips' identical split in
-  // game.tsx.
-  lockOrientation: boolean
 }
 
 const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
@@ -37,22 +33,18 @@ const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
 // header comment). Ported from LightCycles' OnboardingOverlay.tsx: a "3, 2, 1, GO!" countdown that
 // fades out and calls onComplete. Dropped relative to that version, per the build brief: round-
 // history pips (no match-series/rematch concept in Snake) are gone entirely. Rotation is computed
-// internally from lockOrientation + this component's own useOrientationState() calls rather than
-// threaded in as a `rotation` prop the way SettingsDialog/GameOverDialog take it — the two-zone
-// branch's getFixedZoneRotation/getOpposingZoneRotation pair (fixed physical zones, glyph-only
-// rotate) and the solo/vsCpu branch's getViewRotation (no zone to protect, so it also repositions
-// under a live tilt) are different enough that folding them into one shared prop wouldn't simplify
-// anything here.
-export default function OnboardingOverlay({ onComplete, humanPlayers, colors, lockOrientation }: OnboardingOverlayProps) {
+// internally from this component's own useOrientationState() read rather than threaded in as a
+// `rotation` prop the way SettingsDialog/GameOverDialog take it: the two-zone branch's
+// getFixedZoneRotation/getOpposingZoneRotation pair (fixed physical zones, glyph-only rotate) and
+// the solo/vsCpu branch's getViewRotation (no zone to protect, so a portrait upside-down hold flips
+// its countdown too) are different enough that folding them into one shared prop wouldn't simplify
+// anything here. Lock Orientation needs no handling of its own: _layout.tsx's OrientationProvider
+// freezes the shared reading both branches come from.
+export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: OnboardingOverlayProps) {
   const { fonts } = useAutoPaperTheme()
   const opacity = useSharedValue(1)
   const [stageIndex, setStageIndex] = useState(0)
   const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
-  // A second, independent, lock-aware subscription — only used by the solo/vsCpu branch below,
-  // which (unlike the two-zone branch's getFixedZoneRotation) has no second seat's zone to protect,
-  // so a portrait upside-down hold should flip its countdown too instead of being ignored.
-  const soloOrientation = useOrientationState(lockOrientation)
-  const soloRotation = getViewRotation(soloOrientation.orientationMode, soloOrientation.p1OnRight, soloOrientation.upsideDown)
 
   const { playCountdownTick, playCountdownGo } = useSnakeSounds()
   const soundRef = useRef({ playCountdownTick, playCountdownGo })
@@ -95,6 +87,9 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors, lo
   // "snake 1 is always the human" convention) rather than left plain, so this zone reads
   // consistently with the two-zone case below instead of looking like a different, simpler mode.
   if (humanPlayers.length === 1) {
+    // Unlike the two-zone branch's getFixedZoneRotation below, there's no second seat's zone to
+    // protect, so a portrait upside-down hold flips this countdown too instead of being ignored.
+    const soloRotation = getViewRotation(orientationMode, p1OnRight, upsideDown)
     return (
       <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]} pointerEvents='none'>
         <View style={[styles.zone, styles.zoneFull, { borderColor: colors.snake1, backgroundColor: `${colors.snake1}22` }]}>

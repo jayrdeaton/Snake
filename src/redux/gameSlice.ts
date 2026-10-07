@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
+import type { ViewRotation } from '@tastic/core'
 import { REHYDRATE } from 'redux-persist'
 
 import type { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
@@ -24,20 +25,28 @@ export type GameSliceState = {
   // a real Easy/Normal/Hard pick lands here via setCpuDifficulty, it stays non-null forever after,
   // same "remember my real preference" convention lastGuestColor/lastCpuColor use for player colors.
   cpuDifficulty: CpuDifficulty | null
-  // Mirrors LightCycles' GameSettings.lockOrientation (see useOrientationState's own
-  // param), relevant again now that Vs CPU/2 Player use the real @tastic/core accelerometer
-  // orientation system. LightCycles persists its whole settings object to AsyncStorage separately
+  // The Settings dialog's Lock Orientation toggle, mirroring LightCycles' GameSettings.lockOrientation.
+  // App-wide: _layout.tsx hands it to @tastic/core's OrientationProvider (with freezeWhileLocked), so
+  // while it's on, the one shared orientation reading freezes for every screen, overlay, dialog, the
+  // board and touch input alike; no call site reads it to lock its own view any more.
+  // LightCycles persists its whole settings object to AsyncStorage separately
   // from Redux (see its gameSettingsValidation.ts) because it predates this app's Redux-first
   // settings setup; Snake already centralizes every other persisted preference (wrapEdges,
   // cpuDifficulty) in this same slice, so adding it here — rather than a parallel local-state/prop
   // scheme just for this one flag — keeps exactly one persisted-settings home instead of two.
   lockOrientation: boolean
+  // The angle the lock is holding (a @tastic/core ViewRotation). Written only by OrientationProvider's
+  // onLockChange in _layout.tsx (recorded on lock, cleared on unlock) and handed back as its
+  // lockInitialValue, so a relaunch reopens in the locked orientation from the first frame instead of
+  // portrait. Never set by UI directly. Optional and left out of defaultGameState: the REHYDRATE merge
+  // below copes with it being absent.
+  lockedRotation?: ViewRotation
   // iOS-only. Off by default — deliberately opt-in rather than always-on, so it only kicks in for
   // someone who's actually hit the problem and gone looking for a fix, instead of every player
   // eating a "swipe twice to go home" surprise from day one. Mirrored into native UserDefaults (see
   // Providers.tsx's EdgeGuardBridge) for plugins/withDeferBottomEdgeGestures.js's swizzled
   // preferredScreenEdgesDeferringSystemGestures to read at runtime. Lives here rather than a
-  // separate settings object, same reasoning as lockOrientation immediately above: this app already
+  // separate settings object, same reasoning as lockOrientation above: this app already
   // centralizes every persisted preference in this one slice instead of opening a second, parallel
   // persisted-settings mechanism just for one flag (see LightCycles' own GameSettings.
   // deferBottomEdgeGestures for the non-Redux version of the same idea).
@@ -110,6 +119,7 @@ const slice = createSlice({
     setFullScreen: (state, action: PayloadAction<boolean>) => ({ ...state, fullScreen: action.payload }),
     setCpuDifficulty: (state, action: PayloadAction<CpuDifficulty>) => ({ ...state, cpuDifficulty: action.payload }),
     setLockOrientation: (state, action: PayloadAction<boolean>) => ({ ...state, lockOrientation: action.payload }),
+    setLockedRotation: (state, action: PayloadAction<ViewRotation | undefined>) => ({ ...state, lockedRotation: action.payload }),
     setDeferBottomEdgeGestures: (state, action: PayloadAction<boolean>) => ({ ...state, deferBottomEdgeGestures: action.payload }),
     setLastGuestColor: (state, action: PayloadAction<{ seat: SnakeId; color: string }>) => ({
       ...state,

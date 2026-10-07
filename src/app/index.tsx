@@ -6,23 +6,20 @@ import { router } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useSelector } from 'react-redux'
 
 import { HeroTitle } from '@/components/HeroTitle'
 import { SettingsDialog } from '@/components/SettingsDialog'
-import type { RootState } from '@/redux/store'
 
 export default function HomeScreen() {
   const { colors, dark } = useAutoPaperTheme()
   // Follows the device's current physical tilt (see @tastic/core's useOrientationState, which
   // useRotation reads internally), so the title screen rotates along with everywhere else as soon
-  // as the phone is turned — Lock Orientation (see SettingsDialog) is the opt-in for pinning it,
-  // same persisted gameSlice flag loadout.tsx/game.tsx's own live orientation reads already thread
-  // through (see gameSlice.ts's own lockOrientation comment). app.json is portrait-locked at the OS
-  // level (no more real OS rotation to rely on) — see FakeLandscapeView below, which fakes the rest
-  // entirely in JS from this hook's live accelerometer reading.
-  const lockOrientation = useSelector((state: RootState) => state.game.lockOrientation)
-  const rotation = useRotation(lockOrientation)
+  // as the phone is turned. Lock Orientation (see SettingsDialog) pins it, app-wide: _layout.tsx's
+  // OrientationProvider freezes the shared reading itself while it's on, so nothing here takes the
+  // flag (see gameSlice.ts's own lockOrientation comment). app.json is portrait-locked at the OS
+  // level (no more real OS rotation to rely on); FakeLandscapeView below fakes the rest entirely in
+  // JS from this hook's accelerometer reading.
+  const rotation = useRotation()
   // react-native-safe-area-context always reports insets relative to the device's own fixed
   // physical frame (the OS thinks the interface is still portrait-locked and never rotates, so it
   // has no idea FakeLandscapeView below is rotating the content) — rotateInsets remaps them onto
@@ -57,7 +54,7 @@ export default function HomeScreen() {
       deliberately left outside this wrapper — it renders as a centered modal overlay via Portal,
       unaffected by (and not needing) this transform; it gets the same live `rotation` passed
       directly instead, rotating its own content in place. */}
-      <FakeLandscapeView locked={lockOrientation} style={styles.rotatable}>
+      <FakeLandscapeView style={styles.rotatable}>
         {/* Same top-left slot every @tastic title screen uses for this — see LightCycles' own
         identical trophy IconButton. */}
         <IconButton icon='trophy' iconColor={fg} size={24} style={[styles.trophyButton, { top: 8 + insets.top, left: 8 + insets.left }]} onPress={() => router.push('/achievements')} accessibilityLabel='Stats & Achievements' />

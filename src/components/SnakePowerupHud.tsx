@@ -23,12 +23,14 @@ function HeldItemBadge({ heldPowerup }: { heldPowerup: SnakeEntity['heldPowerup'
 }
 
 // Corner-positioned held-item badge per snake, mirroring LightCycles' PowerupHud.tsx. Corner picked
-// per snake from the live orientationMode/p1OnRight — the same "is this seat on the right"
-// convention SnakeBoardCanvas.tsx's wallPath and TouchInputLayer.tsx's zone split already use — so
+// per snake from the shared orientationMode/p1OnRight reading (the same "is this seat on the right"
+// convention SnakeBoardCanvas.tsx's wallPath and TouchInputLayer.tsx's zone split already use), so
 // each badge always sits in that snake's own zone rather than a side fixed regardless of how the
 // device is physically being held. In faceToFace, column doesn't matter (each snake's zone spans
 // the full width): snake 1 stays bottom, snake 2 stays top, regardless of p1OnRight. Solo mode
-// (snakes.length === 1) simply has no snake 2 to render a second badge for.
+// (snakes.length === 1) simply has no snake 2 to render a second badge for. Lock Orientation holds
+// the badges still along with the board's walls and touch zones (_layout.tsx's OrientationProvider
+// freezes the shared reading app-wide).
 export function SnakePowerupHud({ snakes }: SnakePowerupHudProps) {
   const { orientationMode, p1OnRight } = useOrientationState()
   const snake1 = snakes.find((s) => s.id === 1)

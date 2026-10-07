@@ -1,3 +1,5 @@
+import { REHYDRATE } from 'redux-persist'
+
 import gameReducer, { defaultGameState, gameActions, type GameSliceState } from '@/redux/gameSlice'
 import type { ControlScheme, SnakeId } from '@/types'
 
@@ -42,5 +44,34 @@ describe('gameSlice setControlScheme', () => {
         }
       }
     }
+  })
+})
+
+// lockedRotation is only ever written by OrientationProvider's onLockChange (see _layout.tsx):
+// recorded when the lock engages, cleared when it releases.
+describe('gameSlice setLockedRotation', () => {
+  it('starts absent, so an unlocked default has no angle to restore', () => {
+    expect(defaultGameState.lockedRotation).toBeUndefined()
+  })
+
+  it('records the locked angle', () => {
+    const state = gameReducer({ ...defaultGameState, lockOrientation: true }, gameActions.setLockedRotation(-90))
+    expect(state.lockedRotation).toBe(-90)
+    expect(state.lockOrientation).toBe(true)
+  })
+
+  it('clears it on unlock', () => {
+    const state = gameReducer({ ...defaultGameState, lockedRotation: 180 }, gameActions.setLockedRotation(undefined))
+    expect(state.lockedRotation).toBeUndefined()
+  })
+
+  it('survives a rehydrate, and a save from before it existed rehydrates without one', () => {
+    const restored = gameReducer(defaultGameState, { type: REHYDRATE, payload: { game: { lockOrientation: true, lockedRotation: 90 } } })
+    expect(restored.lockOrientation).toBe(true)
+    expect(restored.lockedRotation).toBe(90)
+
+    const legacy = gameReducer(defaultGameState, { type: REHYDRATE, payload: { game: { lockOrientation: true } } })
+    expect(legacy.lockOrientation).toBe(true)
+    expect(legacy.lockedRotation).toBeUndefined()
   })
 })

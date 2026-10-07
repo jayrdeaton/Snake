@@ -115,8 +115,7 @@ export default function LoadoutScreen() {
   const routeMode = params.mode === 'twoPlayer' ? 'twoPlayer' : 'onePlayer'
   const p2IsHuman = routeMode === 'twoPlayer'
 
-  const lockOrientation = useSelector((state: RootState) => state.game.lockOrientation)
-  const { orientationMode, p1OnRight, upsideDown, resolved: p1OnRightResolved } = useOrientationState(lockOrientation)
+  const { orientationMode, p1OnRight, upsideDown, resolved: p1OnRightResolved } = useOrientationState()
   const { panelLayout, panelFadeStyle } = useDualZoneLayout(orientationMode, p1OnRight, p1OnRightResolved, upsideDown, PANEL_SWAP_FADE_MS)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
