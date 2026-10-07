@@ -29,8 +29,8 @@ interface Props {
   wrapEdges: boolean
   wrapEdgesOption: MenuOption<'wrapEdges'>
   onWrapEdgesChange: (value: boolean) => void
-  // Same shape as wrapEdges immediately above — see gameSlice.ts's own fullScreen comment for what
-  // it actually does.
+  // Same shape as wrapEdges immediately above: see types/index.ts's Settings fullScreen comment for
+  // what it actually does.
   fullScreen: boolean
   fullScreenOption: MenuOption<'fullScreen'>
   onFullScreenChange: (value: boolean) => void
@@ -45,8 +45,8 @@ interface Props {
   speedTier: SnakeSpeedTier
   speedOptions: MenuOption<SnakeSpeedTier>[]
   onSpeedChange: (value: SnakeSpeedTier) => void
-  // Which powerup types can spawn this round — "off" is simply an empty array (see gameSlice.ts's
-  // own enabledPowerups comment), so this one multi-select control covers both at once rather than
+  // Which powerup types can spawn this round: "off" is simply an empty array (see types/index.ts's
+  // Settings enabledPowerups comment), so this one multi-select control covers both at once rather than
   // needing a separate on/off toggle alongside it. Matches LightCycles' identical 'powerups'
   // trigger.
   enabledPowerups: SnakePowerupType[]

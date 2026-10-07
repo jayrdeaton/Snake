@@ -46,7 +46,7 @@ export interface SnakeBoardProps {
   // so retry snaps instead of gliding across the board, `tickIntervalMs` is the glide's duration.
   tick: number
   tickIntervalMs: number
-  // Per-round GameSliceState.wrapEdges — see Walls' own comment on what this hides and why.
+  // The round's Settings.wrapEdges: see Walls' own comment on what this hides and why.
   wrapEdges: boolean
   // game.tsx's own OUTER phase ('onboarding' | 'playing' | 'gameOver'), not the `phase` prop above
   // (SnakeGameState['phase'], the engine's narrower 'playing' | 'roundOver' — see useSnakeState.ts's

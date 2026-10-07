@@ -46,10 +46,11 @@ const rootReducer = combineReducers({
   scrollView: scrollViewReducer,
   haptic: hapticReducer,
   sound: appSoundReducer,
+  // The persisted settings (see settingsSlice.ts).
   settings,
+  // /loadout's per-seat color memory (see gameSlice.ts).
   game,
-  // Transient per-round state, deliberately kept out of gameSlice — see liveplaySlice.ts's own doc
-  // for why, and persistConfig's blacklist below for how.
+  // Transient per-round state, the one key blacklisted from persistence below (see liveplaySlice.ts).
   liveplay,
   // The shared App Group roster (see @tastic/profile's resolveInitialProfiles/
   // useSharedProfilesSync, wired in hooks/useProfiles.tsx) is layered on top of this as a separate
@@ -59,8 +60,8 @@ const rootReducer = combineReducers({
   profiles: profilesReducer,
   profileSelection,
   // Which version of the how-to-play flow this player has finished or skipped, as its own key rather
-  // than a gameSlice field: gameSlice's REHYDRATE merge backfills any missing field from
-  // defaultGameState, which would hand an existing player "never seen" and show them the guide after
+  // than a Settings field: settingsSlice's REHYDRATE handling backfills any missing field from
+  // DEFAULT_SETTINGS, which would hand an existing player "never seen" and show them the guide after
   // an update, while this slice stamps them as seen instead. Persisted like every key here (only
   // liveplay is blacklisted below). See guideSlice.ts's own doc.
   guide
@@ -69,8 +70,7 @@ const rootReducer = combineReducers({
 const persistConfig = {
   key: 'root',
   storage: AsyncStorage,
-  // liveplay is the one slice that must never survive a rehydrate — see its own doc comment.
-  // Every other slice here is a genuine persisted preference/record.
+  // liveplay is per-round state that must never survive a relaunch (see liveplaySlice.ts).
   blacklist: ['liveplay'],
   // A player with no root store but a key an earlier shipped build wrote (see LEGACY_STORAGE_KEYS)
   // is rehydrated as a returning player, so the guide slice grandfathers them instead of treating

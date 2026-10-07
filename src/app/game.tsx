@@ -28,6 +28,7 @@ import { useProfiles } from '@/hooks/useProfiles'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { SnakeMode, useSnakeState } from '@/hooks/useSnakeState'
 import { liveplayActions } from '@/redux/liveplaySlice'
+import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { RootState } from '@/redux/store'
 import { AchievementDefinition, Direction, GamePhase, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
 import { safeBack } from '@/utils/navigation'
@@ -51,12 +52,20 @@ export default function GameScreen() {
   const rawP2Color = Array.isArray(params.p2Color) ? params.p2Color[0] : params.p2Color
   const colors = useMemo(() => (rawP1Color || rawP2Color ? { 1: rawP1Color, 2: rawP2Color } : undefined), [rawP1Color, rawP2Color])
 
+  // The settings this round plays with: committed once by /loadout when every human player readied
+  // up (see liveplaySlice.ts), so a settings change made mid-match only affects the next match.
+  // Falls back to the defaults for a direct/deep link to this screen, which never went through
+  // /loadout to commit anything. Lock Orientation and Edge Guard still apply at once: _layout.tsx's
+  // OrientationBridge and Providers.tsx's EdgeGuardBridge read the persisted settings, never this
+  // snapshot.
+  const activeRoundSettings = useSelector((state: RootState) => state.liveplay.activeRoundSettings) ?? DEFAULT_SETTINGS
+
   const { width, height } = useSettledWindowDimensions()
-  const fullScreen = useSelector((state: RootState) => state.game.fullScreen)
+  const fullScreen = activeRoundSettings.fullScreen
   // Resolved once here (not inside the computeGridSize useMemo below) since designWidth/
   // designHeight and the cellPx prop passed to SnakeBoard both need the same resolved pixel size
   // too — see constants/snake.ts's own SNAKE_CELL_PX comment for what each tier actually means.
-  const gridSizeTier = useSelector((state: RootState) => state.game.gridSizeTier)
+  const gridSizeTier = activeRoundSettings.gridSizeTier
   const cellPx = SNAKE_CELL_PX[gridSizeTier]
   const insets = useSafeAreaInsets()
   const { gutterWidth } = computeContentBounds(width, MAX_BOARD_CONTENT_WIDTH)
@@ -74,25 +83,25 @@ export default function GameScreen() {
   const availableHeight = fullScreen ? height : height - insets.top - insets.bottom
   const grid = useMemo(() => computeGridSize(availableWidth, availableHeight, cellPx), [availableWidth, availableHeight, cellPx])
 
-  const wrapEdges = useSelector((state: RootState) => state.game.wrapEdges)
-  const speedTier = useSelector((state: RootState) => state.game.speedTier)
-  const arenaVariant = useSelector((state: RootState) => state.game.arenaVariant)
-  const enabledPowerups = useSelector((state: RootState) => state.game.enabledPowerups)
-  // null only until a real vsCpu difficulty is first picked (see gameSlice.ts's own cpuDifficulty
-  // comment) — 'normal' here is just a type-safe placeholder for solo/twoPlayer, which gate
-  // useSnakeState/recordRoundOutcome away from ever actually reading this value.
-  const cpuDifficulty = useSelector((state: RootState) => state.game.cpuDifficulty) ?? 'normal'
-  const controlScheme = useSelector((state: RootState) => state.game.controlScheme)
+  const wrapEdges = activeRoundSettings.wrapEdges
+  const speedTier = activeRoundSettings.speedTier
+  const arenaVariant = activeRoundSettings.arenaVariant
+  const enabledPowerups = activeRoundSettings.enabledPowerups
+  // null only until a real vsCpu difficulty is first picked (see types/index.ts's Settings
+  // cpuDifficulty comment). 'normal' here is just a type-safe placeholder for solo/twoPlayer, which
+  // gate useSnakeState/recordRoundOutcome away from ever actually reading this value.
+  const cpuDifficulty = activeRoundSettings.cpuDifficulty ?? 'normal'
+  const controlScheme = activeRoundSettings.controlScheme
   const { recordRoundOutcome, stats } = useGameStats()
   const { lastSelected, profiles } = useProfiles()
   const { clear: clearToasts, success: showAchievementToast } = useToast()
   const dispatch = useDispatch()
 
-  // Bundled once via useMemo — see types/index.ts's own SnakeRoundSettings comment for why this is
-  // just a function-signature convenience over 4 already-read redux values, not a second persisted-
+  // Bundled once via useMemo: see types/index.ts's own SnakeRoundSettings comment for why this is
+  // just a function-signature convenience over 4 already-read round settings, not a second
   // settings home. Memoized so useSnakeState's own retry/tick-loop callbacks (which depend on this
-  // object's identity) don't churn every render — only when one of the underlying redux values
-  // actually changes.
+  // object's identity) don't churn every render, only when one of the underlying values actually
+  // changes.
   const roundSettings: SnakeRoundSettings = useMemo(() => ({ wrapEdges, speedTier, arenaVariant, enabledPowerups }), [wrapEdges, speedTier, arenaVariant, enabledPowerups])
 
   // All-zero unless the board is actually bleeding under the real insets (fullScreen) — see

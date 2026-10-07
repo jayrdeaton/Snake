@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from 'react-redux'
 
 import { GUIDE_VERSION } from '@/constants/guide'
 import { getGuideSteps } from '@/constants/guideSteps'
+import { useSettings } from '@/hooks/useSettings'
 import { guideActions, selectGuideVersionSeen } from '@/redux/guideSlice'
 import type { RootState } from '@/redux/store'
 
@@ -25,12 +26,13 @@ interface Props {
 // re-render here never re-renders the navigator under it (same isolation _layout's
 // OrientationBridge relies on).
 //
-// `controls` is the live per-seat control scheme (gameSlice's controlScheme, picked per seat in
+// `controls` is the live per-seat control scheme (settings.controlScheme, picked per seat in
 // /loadout on desktop web), so a replayed guide names the controls each seat really uses.
 export function GuideHost({ children }: Props) {
   const rotation = useRotation()
   const touch = useIsTouchPrimaryDevice()
-  const controls = useSelector((state: RootState) => state.game.controlScheme)
+  const { settings } = useSettings()
+  const controls = settings.controlScheme
   const seenVersion = useSelector((state: RootState) => selectGuideVersionSeen(state))
   const dispatch = useDispatch()
 

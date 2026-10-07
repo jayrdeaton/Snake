@@ -1,18 +1,16 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
-import { type OrientationLockSettings, OrientationProvider, RotationAwareStatusBar, useThemedRootBackground } from '@tastic/core'
+import { OrientationProvider, RotationAwareStatusBar, useThemedRootBackground } from '@tastic/core'
 import { Stack } from 'expo-router'
 import { DeviceMotion } from 'expo-sensors'
 import * as SplashScreen from 'expo-splash-screen'
-import { type ReactNode, useCallback } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
+import { type ReactNode } from 'react'
 
 import { GuideHost } from '@/components/GuideHost'
 import { Providers } from '@/components/Providers'
 import { UpdateDialog } from '@/components/UpdateDialog'
 import { GameStatsProvider } from '@/hooks/useGameStats'
 import { ProfilesProvider } from '@/hooks/useProfiles'
-import { gameActions } from '@/redux/gameSlice'
-import type { RootState } from '@/redux/store'
+import { useSettings } from '@/hooks/useSettings'
 
 SplashScreen.preventAutoHideAsync()
 SplashScreen.setOptions({ fade: true, duration: 400 })
@@ -43,35 +41,28 @@ const RootNavigator = () => {
   )
 }
 
-// Needs its own component (rather than reading state.game directly in RootLayout below) so
-// useSelector runs INSIDE Providers' own <ReduxProvider>, not above it: RootLayout itself renders
-// <Providers>, so a hook call in RootLayout's own body would run before that Redux context exists at
-// all. Inside Providers also means inside its PersistGate, so the persisted lock is already
-// rehydrated by the time this mounts.
+// Wires the persisted Lock Orientation setting into @tastic/core's OrientationProvider. Its own
+// component because RootLayout renders the Redux store (inside Providers) and so can't call
+// useSettings() itself. Providers' PersistGate holds rendering until the store has rehydrated, so
+// lockInitialValue carries the saved lock from the very first render.
 //
-// Lock Orientation is app-wide. freezeWhileLocked makes @tastic/core freeze its one shared
-// orientation reading while the lock is on, so every consumer (each screen's useOrientationState/
-// useRotation and FakeLandscapeView, the board, touch input, overlays, @tastic/hud's dialogs and
-// RotationAwareStatusBar below) holds the same angle, including anything that mounts after the lock;
-// no call site is handed the flag. While locked, core records the held angle as `rotation` and
-// reports it through onLockChange (cleared on unlock); persisting it as lockedRotation and handing it
-// back through lockInitialValue is what makes a locked relaunch open in that orientation from the
-// first frame instead of portrait. The Settings dialog's toggle still just dispatches
-// setLockOrientation: the provider adopts the changed lockInitialValue and reports the result back
-// through onLockChange like any other lock change.
+// freezeWhileLocked makes the lock app-wide: while settings.lockOrientation is on, the ONE shared
+// orientation reading freezes for every consumer (every screen, the in-game board, hud dialogs, the
+// status bar), including anything that mounts after the lock, so no call site ever takes a `locked`
+// argument of its own (one would freeze on the pre-sensor default at mount). The Settings dialog
+// toggle only writes settings.lockOrientation, which reaches the provider as a changed
+// lockInitialValue; the provider reports the angle it froze on through onLockChange (`rotation`,
+// cleared on unlock), persisted as settings.lockedRotation and handed back here so a relaunch reopens
+// in the locked orientation instead of portrait.
+//
+// Mounted once, here, rather than per screen: one app-lifetime sensor subscription is what lets the
+// committed orientation survive navigation. deviceMotion is the app's own expo-sensors import, handed
+// in because @tastic/core never imports expo-sensors itself (apps without tilt tracking would
+// otherwise need it installed just to bundle).
 function OrientationBridge({ children }: { children: ReactNode }) {
-  const lockOrientation = useSelector((state: RootState) => state.game.lockOrientation)
-  const lockedRotation = useSelector((state: RootState) => state.game.lockedRotation)
-  const dispatch = useDispatch()
-  const onLockChange = useCallback(
-    (next: OrientationLockSettings) => {
-      dispatch(gameActions.setLockOrientation(next.locked))
-      dispatch(gameActions.setLockedRotation(next.rotation))
-    },
-    [dispatch]
-  )
+  const { settings, setSettings } = useSettings()
   return (
-    <OrientationProvider deviceMotion={DeviceMotion} freezeWhileLocked lockInitialValue={{ locked: lockOrientation, rotation: lockedRotation }} onLockChange={onLockChange}>
+    <OrientationProvider deviceMotion={DeviceMotion} freezeWhileLocked lockInitialValue={{ locked: settings.lockOrientation, rotation: settings.lockedRotation }} onLockChange={(next) => setSettings({ lockOrientation: next.locked, lockedRotation: next.rotation })}>
       {children}
     </OrientationProvider>
   )

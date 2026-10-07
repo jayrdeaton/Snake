@@ -2,11 +2,11 @@ import { DirectionKeysHint, SeatDevicesHint, SwipeHint } from '@tastic/hud/guide
 import type { ReactElement } from 'react'
 
 import { getGuideSteps } from '@/constants/guideSteps'
-import { defaultGameState } from '@/redux/gameSlice'
+import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { ControlScheme, SnakeId } from '@/types'
 
-// gameSlice's own default: seat 1 on the mouse, seat 2 on WASD.
-const DEFAULT_CONTROLS = defaultGameState.controlScheme
+// The settings' own default: seat 1 on the mouse, seat 2 on WASD.
+const DEFAULT_CONTROLS = DEFAULT_SETTINGS.controlScheme
 const SCHEMES: ControlScheme[] = ['mouse', 'wasd', 'arrows', 'ijkl', 'numpad']
 // Every combination, including a same-scheme pair: setControlScheme now swaps on conflict, but a
 // save made before that change can still hold one, and the copy must stay within its limits there.

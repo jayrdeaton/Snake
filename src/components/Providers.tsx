@@ -16,9 +16,9 @@ import { persistor, type RootState, store } from '@/redux/store'
 
 import { Theme } from './Theme'
 
-export type ProvidersProps = { children: React.ReactNode }
+export type Props = { children: React.ReactNode }
 
-const FeedbackBridge = ({ children }: ProvidersProps) => {
+const FeedbackBridge = ({ children }: Props) => {
   const haptic = useSelector((state: RootState) => state.haptic)
   const sound = useSelector((state: RootState) => state.sound)
   const dispatch = useDispatch()
@@ -33,20 +33,18 @@ const FeedbackBridge = ({ children }: ProvidersProps) => {
   )
 }
 
-// Mounted once, permanently, same as FeedbackBridge/ScrollViewBridge below — not scoped to the
-// game screen. deferBottomEdgeGestures (gameSlice) is the persisted user preference; activelyPlaying
-// (liveplaySlice, deliberately blacklisted from redux-persist — see that slice's own doc) is
-// game.tsx's own report of whether a round is actually in progress right now. Combining both here,
-// in the one place @tastic/edge-guard's hook is ever called, is what keeps Edge Guard both a real
-// opt-in AND scoped to actual gameplay, without needing the hook itself mounted/unmounted per screen.
-const EdgeGuardBridge = ({ children }: ProvidersProps) => {
-  const deferBottomEdgeGestures = useSelector((state: RootState) => state.game.deferBottomEdgeGestures)
+// The one place @tastic/edge-guard's hook is called, mounted once for the app's lifetime rather than
+// per screen. settings.deferBottomEdgeGestures is the player's opt-in; liveplay.activelyPlaying is
+// /game's report that a live round is in progress right now (see liveplaySlice.ts). Combining them
+// here keeps Edge Guard both opt-in and scoped to actual play.
+const EdgeGuardBridge = ({ children }: Props) => {
+  const deferBottomEdgeGestures = useSelector((state: RootState) => state.settings.deferBottomEdgeGestures)
   const activelyPlaying = useSelector((state: RootState) => state.liveplay.activelyPlaying)
   useEdgeGestureGuard(deferBottomEdgeGestures && activelyPlaying)
   return <>{children}</>
 }
 
-const ScrollViewBridge = ({ children }: ProvidersProps) => {
+const ScrollViewBridge = ({ children }: Props) => {
   const scrollView = useSelector((state: RootState) => state.scrollView)
   const dispatch = useDispatch()
   const onChange = useCallback((settings: ScrollViewSettings) => dispatch(scrollViewActions.initialize(settings)), [dispatch])
@@ -57,7 +55,7 @@ const ScrollViewBridge = ({ children }: ProvidersProps) => {
   )
 }
 
-export const Providers = ({ children }: ProvidersProps) => {
+export const Providers = ({ children }: Props) => {
   return (
     <GestureHandlerRootView>
       <SafeAreaProvider>

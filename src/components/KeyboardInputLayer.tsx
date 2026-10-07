@@ -31,7 +31,7 @@ export interface KeyboardInputLayerProps {
 // already handle mouse-drag on web via react-native-gesture-handler's own web support — see that
 // file) — this never disables them, mirroring LightCycles' TouchInputLayer.web.tsx, where keyScheme
 // only ever picks *which keys* move a seat, not *whether* pointer input still works too. A seat left
-// on 'mouse' (the default — see gameSlice.ts) is simply never given a key mapping here at all.
+// on 'mouse' (the default, see redux/settingsSlice.ts) is simply never given a key mapping here at all.
 //
 // Self-gates on Platform.OS inside the effect rather than needing a `.web.tsx` sibling file the way
 // TouchInputLayer.tsx/LightCycles' own TouchInputLayer.tsx do — there's no native counterpart for

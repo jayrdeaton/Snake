@@ -16,7 +16,7 @@ export default function HomeScreen() {
   // useRotation reads internally), so the title screen rotates along with everywhere else as soon
   // as the phone is turned. Lock Orientation (see SettingsDialog) pins it, app-wide: _layout.tsx's
   // OrientationProvider freezes the shared reading itself while it's on, so nothing here takes the
-  // flag (see gameSlice.ts's own lockOrientation comment). app.json is portrait-locked at the OS
+  // flag (see types/index.ts's Settings lockOrientation comment). app.json is portrait-locked at the OS
   // level (no more real OS rotation to rely on); FakeLandscapeView below fakes the rest entirely in
   // JS from this hook's accelerometer reading.
   const rotation = useRotation()

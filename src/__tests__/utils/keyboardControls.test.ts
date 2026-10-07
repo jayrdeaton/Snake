@@ -1,4 +1,5 @@
-import { resolveControlSchemeActivate, resolveControlSchemeDirection } from '@/utils/keyboardControls'
+import type { ControlScheme, SnakeId } from '@/types'
+import { assignControlScheme, resolveControlSchemeActivate, resolveControlSchemeDirection } from '@/utils/keyboardControls'
 
 describe('resolveControlSchemeDirection', () => {
   it('returns null for the mouse scheme regardless of key', () => {
@@ -80,5 +81,41 @@ describe('resolveControlSchemeActivate', () => {
     it('does not trigger on any of the numpad direction cluster keys', () => {
       expect(resolveControlSchemeActivate({ key: '8', code: 'Numpad8' }, 'numpad')).toBe(false)
     })
+  })
+})
+
+describe('assignControlScheme', () => {
+  it('sets only that seat when the scheme is free', () => {
+    expect(assignControlScheme({ 1: 'mouse', 2: 'wasd' }, 1, 'arrows')).toEqual({ 1: 'arrows', 2: 'wasd' })
+  })
+
+  // 1 Player's /loadout shows only seat 1's picker, with no takenValue, so this is reachable there.
+  // Without the swap both seats kept WASD, and in 2 Player every WASD key went to seat 1.
+  it("swaps when seat 1 picks seat 2's scheme", () => {
+    expect(assignControlScheme({ 1: 'mouse', 2: 'wasd' }, 1, 'wasd')).toEqual({ 1: 'wasd', 2: 'mouse' })
+  })
+
+  it("swaps when seat 2 picks seat 1's scheme", () => {
+    expect(assignControlScheme({ 1: 'ijkl', 2: 'numpad' }, 2, 'ijkl')).toEqual({ 1: 'numpad', 2: 'ijkl' })
+  })
+
+  it('leaves both seats alone when a seat re-picks its own scheme', () => {
+    expect(assignControlScheme({ 1: 'mouse', 2: 'wasd' }, 2, 'wasd')).toEqual({ 1: 'mouse', 2: 'wasd' })
+  })
+
+  it('never leaves two seats on one scheme, from any distinct starting pair', () => {
+    const schemes: ControlScheme[] = ['mouse', 'wasd', 'arrows', 'ijkl', 'numpad']
+    for (const a of schemes) {
+      for (const b of schemes) {
+        if (a === b) continue
+        for (const seat of [1, 2] as SnakeId[]) {
+          for (const scheme of schemes) {
+            const controlScheme = assignControlScheme({ 1: a, 2: b }, seat, scheme)
+            expect(controlScheme[seat]).toBe(scheme)
+            expect(controlScheme[1]).not.toBe(controlScheme[2])
+          }
+        }
+      }
+    }
   })
 })

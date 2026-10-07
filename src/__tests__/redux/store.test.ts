@@ -1,22 +1,23 @@
 import { hapticActions } from '@rific/feedback-press'
 import { scrollViewActions } from '@rific/scroll-view'
 
-import { settingsActions } from '../../redux/settingsSlice'
+import { DEFAULT_SETTINGS, settingsActions } from '../../redux/settingsSlice'
 import { persistor, store } from '../../redux/store'
 
 describe('store', () => {
   beforeEach(() => {
-    store.dispatch(settingsActions.resetSettings())
+    store.dispatch(settingsActions.initialize(DEFAULT_SETTINGS))
   })
 
   describe('state shape', () => {
-    it('has theme, scrollView, haptic, sound, and settings keys', () => {
+    it('has theme, scrollView, haptic, sound, settings, and liveplay keys', () => {
       const state = store.getState()
       expect(state).toHaveProperty('theme')
       expect(state).toHaveProperty('scrollView')
       expect(state).toHaveProperty('haptic')
       expect(state).toHaveProperty('sound')
       expect(state).toHaveProperty('settings')
+      expect(state).toHaveProperty('liveplay')
     })
 
     it('initializes theme defaults', () => {
@@ -46,7 +47,11 @@ describe('store', () => {
     })
 
     it('initializes settings defaults', () => {
-      expect(store.getState().settings.debug).toBe(false)
+      expect(store.getState().settings).toEqual(DEFAULT_SETTINGS)
+    })
+
+    it('initializes liveplay defaults', () => {
+      expect(store.getState().liveplay).toEqual({ activelyPlaying: false, activeRoundSettings: null })
     })
 
     it('initializes profiles defaults', () => {
@@ -66,13 +71,13 @@ describe('store', () => {
 
   describe('errorMiddleware', () => {
     it('swallows actions that carry a truthy error field', () => {
-      store.dispatch({ type: 'settings/setDebug', payload: true, error: true } as never)
-      expect(store.getState().settings.debug).toBe(false)
+      store.dispatch({ type: 'settings/initialize', payload: { wrapEdges: true }, error: true } as never)
+      expect(store.getState().settings.wrapEdges).toBe(false)
     })
 
     it('passes normal actions through to the reducer', () => {
-      store.dispatch(settingsActions.setDebug(true))
-      expect(store.getState().settings.debug).toBe(true)
+      store.dispatch(settingsActions.initialize({ wrapEdges: true }))
+      expect(store.getState().settings.wrapEdges).toBe(true)
     })
 
     it('does not swallow actions whose error field is falsy', () => {

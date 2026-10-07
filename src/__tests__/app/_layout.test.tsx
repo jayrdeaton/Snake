@@ -4,7 +4,7 @@ import * as SplashScreen from 'expo-splash-screen'
 
 import RootLayout from '../../app/_layout'
 import { UpdateDialog } from '../../components/UpdateDialog'
-import { gameActions } from '../../redux/gameSlice'
+import { DEFAULT_SETTINGS, settingsActions } from '../../redux/settingsSlice'
 import { store } from '../../redux/store'
 
 jest.mock('expo-router', () => ({
@@ -53,9 +53,10 @@ const mockRotationAwareStatusBar = RotationAwareStatusBar as unknown as jest.Moc
 const latestOrientationProps = () => mockOrientationProvider.mock.calls[mockOrientationProvider.mock.calls.length - 1][0]
 
 // The mocked Providers above hands every render the one real `store`, so each test starts from the
-// default lock state rather than whatever the previous one dispatched.
+// default lock state rather than whatever the previous one dispatched. lockedRotation is cleared
+// explicitly: `initialize` merges, and DEFAULT_SETTINGS has no lockedRotation to merge over it.
 afterEach(() => {
-  store.dispatch(gameActions.resetGameState())
+  store.dispatch(settingsActions.initialize({ ...DEFAULT_SETTINGS, lockedRotation: undefined }))
   mockOrientationProvider.mockClear()
   mockRotationAwareStatusBar.mockClear()
 })
@@ -90,8 +91,7 @@ describe('RootLayout orientation lock wiring', () => {
 
   // What makes a locked relaunch open in the locked orientation instead of portrait.
   it('restores a persisted lock together with its locked angle', async () => {
-    store.dispatch(gameActions.setLockOrientation(true))
-    store.dispatch(gameActions.setLockedRotation(90))
+    store.dispatch(settingsActions.initialize({ lockOrientation: true, lockedRotation: 90 }))
     await render(<RootLayout />)
     expect(latestOrientationProps().lockInitialValue).toEqual({ locked: true, rotation: 90 })
   })
@@ -102,15 +102,15 @@ describe('RootLayout orientation lock wiring', () => {
     await act(async () => {
       latestOrientationProps().onLockChange({ locked: true, rotation: -90 })
     })
-    expect(store.getState().game.lockOrientation).toBe(true)
-    expect(store.getState().game.lockedRotation).toBe(-90)
+    expect(store.getState().settings.lockOrientation).toBe(true)
+    expect(store.getState().settings.lockedRotation).toBe(-90)
     expect(latestOrientationProps().lockInitialValue).toEqual({ locked: true, rotation: -90 })
 
     await act(async () => {
       latestOrientationProps().onLockChange({ locked: false, rotation: undefined })
     })
-    expect(store.getState().game.lockOrientation).toBe(false)
-    expect(store.getState().game.lockedRotation).toBeUndefined()
+    expect(store.getState().settings.lockOrientation).toBe(false)
+    expect(store.getState().settings.lockedRotation).toBeUndefined()
   })
 
   it('renders RotationAwareStatusBar with no per-call-site lock', async () => {

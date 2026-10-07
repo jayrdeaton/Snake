@@ -5,7 +5,7 @@ import { router } from 'expo-router'
 import { Provider as ReduxProvider } from 'react-redux'
 
 import Index from '../../app/index'
-import gameReducer, { defaultGameState, type GameSliceState } from '../../redux/gameSlice'
+import settingsReducer from '../../redux/settingsSlice'
 
 // index.tsx is the real home screen (animated hero title, 1 Player/2 Player buttons, settings
 // gear). HeroTitle's own letter/loop animation is Skia/Reanimated-heavy and has no testable
@@ -19,19 +19,19 @@ jest.mock('expo-router', () => ({
 
 const mockRouterPush = router.push as jest.Mock
 
-const makeStore = (gameState: GameSliceState = defaultGameState) =>
+// index.tsx's SettingsDialog reads its Lock Orientation/Edge Guard toggles through useSettings().
+const makeStore = () =>
   configureStore({
-    reducer: { game: gameReducer },
-    preloadedState: { game: gameState }
+    reducer: { settings: settingsReducer }
   })
 
 // Wrapped in ToastProvider (not the full Providers stack - see that component's own doc) because
 // index.tsx always renders SettingsDialog (just toggling its internal Dialog's own `visible`, not
 // unmounting it), and SettingsDialog now calls useToast() for the Check for Updates row's
 // onUpdateError - which throws without a ToastProvider ancestor, settings panel open or not.
-const renderIndex = (gameState?: GameSliceState) =>
+const renderIndex = () =>
   render(
-    <ReduxProvider store={makeStore(gameState)}>
+    <ReduxProvider store={makeStore()}>
       <ToastProvider>{<Index />}</ToastProvider>
     </ReduxProvider>
   )

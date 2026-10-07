@@ -14,11 +14,16 @@ import { LOADOUT_SHARED_CONTROLS_IDS, LoadoutSharedControls } from '@/components
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { SNAKE_POWERUP_ALL_TYPES, SNAKE_POWERUP_ICONS } from '@/constants/snake'
 import { useProfiles } from '@/hooks/useProfiles'
+import { useSettings } from '@/hooks/useSettings'
 import { SnakeMode } from '@/hooks/useSnakeState'
-import { CpuDifficulty, defaultGameState, gameActions } from '@/redux/gameSlice'
+import { gameActions } from '@/redux/gameSlice'
+import { liveplayActions } from '@/redux/liveplaySlice'
+import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { RootState } from '@/redux/store'
 import { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
+import { assignControlScheme } from '@/utils/keyboardControls'
 import { safeBack } from '@/utils/navigation'
+import { CpuDifficulty } from '@/utils/snakeAi'
 
 // Same 180ms panel-swap fade every other @tastic loadout screen uses (see BoxHockey's/AirHockey's
 // own constant of the same name/value).
@@ -124,6 +129,7 @@ export default function LoadoutScreen() {
   const { colors: themeColors, dark } = useAutoPaperTheme()
   const { set: setThemeSettings } = useThemeSettings()
   const { profiles, lastSelected, selectProfile } = useProfiles()
+  const { settings, setSettings } = useSettings()
   const dispatch = useDispatch()
   const lastGuestColor = useSelector((state: RootState) => state.game.lastGuestColor)
   const lastCpuColor = useSelector((state: RootState) => state.game.lastCpuColor)
@@ -132,23 +138,22 @@ export default function LoadoutScreen() {
   // only cleared when that seat's own selection genuinely changes (handleP1ProfileSelect/
   // handleP2ProfileSelect below), never by merely leaving and returning to this screen.
   const profileOverride = useSelector((state: RootState) => state.game.profileOverride)
-  const persistedCpuDifficulty = useSelector((state: RootState) => state.game.cpuDifficulty)
-  // Promoted here from SettingsDialog's own former "BOARD" section — see LoadoutSharedControls'
-  // own header comment for why. Persisted straight to gameSlice, same as every other Snake
-  // preference (this app centralizes all of them there rather than a separate settings object).
-  const wrapEdges = useSelector((state: RootState) => state.game.wrapEdges)
-  // Same board-dropdown bundle as wrapEdges immediately above — see gameSlice.ts's own fullScreen
-  // comment for what it actually does.
-  const fullScreen = useSelector((state: RootState) => state.game.fullScreen)
-  const arenaVariant = useSelector((state: RootState) => state.game.arenaVariant)
-  const gridSizeTier = useSelector((state: RootState) => state.game.gridSizeTier)
-  const speedTier = useSelector((state: RootState) => state.game.speedTier)
-  const enabledPowerups = useSelector((state: RootState) => state.game.enabledPowerups)
+  const persistedCpuDifficulty = settings.cpuDifficulty
+  // Promoted here from SettingsDialog's own former "BOARD" section (see LoadoutSharedControls'
+  // own header comment for why). Persisted in Settings like every other Snake preference.
+  const wrapEdges = settings.wrapEdges
+  // Same board-dropdown bundle as wrapEdges immediately above: see types/index.ts's Settings
+  // fullScreen comment for what it actually does.
+  const fullScreen = settings.fullScreen
+  const arenaVariant = settings.arenaVariant
+  const gridSizeTier = settings.gridSizeTier
+  const speedTier = settings.speedTier
+  const enabledPowerups = settings.enabledPowerups
   // Web-only per-seat picker (see PlayerSetupPanel's showControlScheme) — Record<SnakeId,...>
   // rather than tied to a Profile, since Snake's Profile is the shared @tastic/profile package's
   // own type as-is (see useProfiles.tsx's own comment) and isn't extended with app-specific fields
   // the way LightCycles' local Profile.keyScheme is.
-  const controlScheme = useSelector((state: RootState) => state.game.controlScheme)
+  const controlScheme = settings.controlScheme
 
   // Seat 2 only ever has a profile in 2 Player — 1 Player's seat 2 is the CPU (or nothing at all,
   // once "None" is picked), which has no profile concept either way (see PlayerSetupPanel's own
@@ -170,7 +175,7 @@ export default function LoadoutScreen() {
   // p1Color/p2Color just above — except "None" itself is never persisted (see handleDifficultyChange),
   // so a "None" pick from an earlier visit never survives a trip away and back, only a real
   // difficulty does. persistedCpuDifficulty is null until a real difficulty has ever been picked
-  // (see gameSlice.ts's own cpuDifficulty comment), which folds into this same "no CPU" state.
+  // (see types/index.ts's Settings cpuDifficulty comment), which folds into this same "no CPU" state.
   const [difficulty, setDifficulty] = useState<CpuDifficultyChoice>(persistedCpuDifficulty ?? 'none')
 
   // (a) A seat with a profile selected shows that profile's own color, unless a manual recolor/
@@ -222,16 +227,16 @@ export default function LoadoutScreen() {
     }, [lastSelected, p2IsHuman])
   )
 
-  // Dispatched immediately on a real Easy/Normal/Hard pick, matching the old title-screen inline
-  // picker's exact behavior now that it lives here instead — "None" is deliberately never
-  // dispatched: it isn't a CPU difficulty preference to remember for next time, it's "there's no
-  // CPU," which finalMode below fully captures without a persisted trace of its own.
+  // Saved immediately on a real Easy/Normal/Hard pick, matching the old title-screen inline
+  // picker's exact behavior now that it lives here instead. "None" is deliberately never saved: it
+  // isn't a CPU difficulty preference to remember for next time, it's "there's no CPU," which
+  // finalMode below fully captures without a persisted trace of its own.
   const handleDifficultyChange = useCallback(
     (value: CpuDifficultyChoice) => {
       setDifficulty(value)
-      if (value !== 'none') dispatch(gameActions.setCpuDifficulty(value))
+      if (value !== 'none') setSettings({ cpuDifficulty: value })
     },
-    [dispatch]
+    [setSettings]
   )
 
   // (b)/(c): a profile-selected seat's own recolor now persists too — as that seat's override (see
@@ -341,20 +346,24 @@ export default function LoadoutScreen() {
   // a stable "how does the board fit my screen" preference rather than a gameplay variant, and
   // players would find it disorienting for that to flip on a random shuffle mid-session.
   const handleRandomizeMatchSettings = useCallback(() => {
-    dispatch(gameActions.setWrapEdges(Math.random() < 0.5))
-    dispatch(gameActions.setArenaVariant(ARENA_OPTIONS[Math.floor(Math.random() * ARENA_OPTIONS.length)].value))
-    dispatch(gameActions.setGridSizeTier(GRID_SIZE_OPTIONS[Math.floor(Math.random() * GRID_SIZE_OPTIONS.length)].value))
-    dispatch(gameActions.setSpeedTier(SPEED_OPTIONS[Math.floor(Math.random() * SPEED_OPTIONS.length)].value))
-    dispatch(gameActions.setEnabledPowerups(SNAKE_POWERUP_ALL_TYPES.filter(() => Math.random() < 0.5)))
-  }, [dispatch])
+    setSettings({
+      wrapEdges: Math.random() < 0.5,
+      arenaVariant: ARENA_OPTIONS[Math.floor(Math.random() * ARENA_OPTIONS.length)].value,
+      gridSizeTier: GRID_SIZE_OPTIONS[Math.floor(Math.random() * GRID_SIZE_OPTIONS.length)].value,
+      speedTier: SPEED_OPTIONS[Math.floor(Math.random() * SPEED_OPTIONS.length)].value,
+      enabledPowerups: SNAKE_POWERUP_ALL_TYPES.filter(() => Math.random() < 0.5)
+    })
+  }, [setSettings])
 
   const handleResetMatchSettings = useCallback(() => {
-    dispatch(gameActions.setWrapEdges(defaultGameState.wrapEdges))
-    dispatch(gameActions.setArenaVariant(defaultGameState.arenaVariant))
-    dispatch(gameActions.setGridSizeTier(defaultGameState.gridSizeTier))
-    dispatch(gameActions.setSpeedTier(defaultGameState.speedTier))
-    dispatch(gameActions.setEnabledPowerups(defaultGameState.enabledPowerups))
-  }, [dispatch])
+    setSettings({
+      wrapEdges: DEFAULT_SETTINGS.wrapEdges,
+      arenaVariant: DEFAULT_SETTINGS.arenaVariant,
+      gridSizeTier: DEFAULT_SETTINGS.gridSizeTier,
+      speedTier: DEFAULT_SETTINGS.speedTier,
+      enabledPowerups: DEFAULT_SETTINGS.enabledPowerups
+    })
+  }, [setSettings])
 
   const humanPlayers: SnakeId[] = useMemo(() => (p2IsHuman ? [1, 2] : [1]), [p2IsHuman])
   const [ready, setReady] = useState<Record<SnakeId, boolean>>({ 1: false, 2: false })
@@ -374,16 +383,30 @@ export default function LoadoutScreen() {
   // genuine no-opponent solo mode for "None" — the one piece of this screen with no equivalent in
   // either BoxHockey's or LightCycles' own loadout/lobby screen (see loadout's header comment).
   // game.tsx/useSnakeState.ts already handle mode:'solo' and mode:'vsCpu' exactly as before this
-  // redesign, reading cpuDifficulty from redux the same way — nothing downstream of this changes.
+  // redesign, reading cpuDifficulty from the round's settings the same way: nothing downstream of
+  // this changes.
   const finalMode: SnakeMode = routeMode === 'twoPlayer' ? 'twoPlayer' : difficulty === 'none' ? 'solo' : 'vsCpu'
+
+  // Read through a ref by the all-ready effect below rather than as one of its dependencies: this
+  // screen stays mounted (and still all Ready) under /game, so a settings change made there (Lock
+  // Orientation in /game's Settings dialog, for one) would otherwise re-run that effect and push a
+  // second /game.
+  const settingsRef = useRef(settings)
+  useEffect(() => {
+    settingsRef.current = settings
+  }, [settings])
 
   useEffect(() => {
     if (!humanPlayers.every((p) => ready[p])) return
+    // The round plays with this snapshot (see liveplaySlice.ts's activeRoundSettings), so a settings
+    // change made mid-match only affects the next match. The mode and colors still travel as route
+    // params: Settings has no mode of its own.
+    dispatch(liveplayActions.setActiveRoundSettings(settingsRef.current))
     // p2Color is omitted for solo, honestly reflecting "there is no second seat" — matching how
     // Solo already worked pre-redesign, when it skipped /loadout and went straight to /game with
     // no p2Color param at all.
     router.push({ pathname: '/game', params: finalMode === 'solo' ? { mode: finalMode, p1Color } : { mode: finalMode, p1Color, p2Color } })
-  }, [ready, humanPlayers, finalMode, p1Color, p2Color])
+  }, [ready, humanPlayers, finalMode, p1Color, p2Color, dispatch])
 
   const bg = dark ? '#000000' : '#FFFFFF'
   const fg = dark ? '#FFFFFF' : '#000000'
@@ -418,22 +441,22 @@ export default function LoadoutScreen() {
       host={controlsHost}
       arenaVariant={arenaVariant}
       arenaOptions={ARENA_OPTIONS}
-      onArenaChange={(value) => dispatch(gameActions.setArenaVariant(value))}
+      onArenaChange={(value) => setSettings({ arenaVariant: value })}
       wrapEdges={wrapEdges}
       wrapEdgesOption={WRAP_EDGES_OPTION}
-      onWrapEdgesChange={(value) => dispatch(gameActions.setWrapEdges(value))}
+      onWrapEdgesChange={(value) => setSettings({ wrapEdges: value })}
       fullScreen={fullScreen}
       fullScreenOption={FULL_SCREEN_OPTION}
-      onFullScreenChange={(value) => dispatch(gameActions.setFullScreen(value))}
+      onFullScreenChange={(value) => setSettings({ fullScreen: value })}
       gridSizeTier={gridSizeTier}
       gridSizeOptions={GRID_SIZE_OPTIONS}
-      onGridSizeChange={(value) => dispatch(gameActions.setGridSizeTier(value))}
+      onGridSizeChange={(value) => setSettings({ gridSizeTier: value })}
       speedTier={speedTier}
       speedOptions={SPEED_OPTIONS}
-      onSpeedChange={(value) => dispatch(gameActions.setSpeedTier(value))}
+      onSpeedChange={(value) => setSettings({ speedTier: value })}
       enabledPowerups={enabledPowerups}
       powerupOptions={POWERUP_OPTIONS}
-      onPowerupsChange={(value) => dispatch(gameActions.setEnabledPowerups(value))}
+      onPowerupsChange={(value) => setSettings({ enabledPowerups: value })}
       // Omitted (leaving LoadoutSharedControls' own actionsRow unrendered) whenever
       // showMetaInSharedBand is about to fold randomize/reset into its own merged header row
       // instead — otherwise both would render at once.
@@ -466,8 +489,8 @@ export default function LoadoutScreen() {
   // so a popover from either one still elevates the shared pickerRow correctly. secondPickerId names
   // the popover id it opens under, so PlayerSetupPanel's own "elevate while one of my own popovers
   // is open" logic still reacts to it exactly as it did when this was baked into that component.
-  const p1ControlSchemePicker = <ControlSchemePicker id='p1-controls' host={controlsHost} value={controlScheme[1]} onChange={(scheme) => dispatch(gameActions.setControlScheme({ seat: 1, scheme }))} options={CONTROL_SCHEME_OPTIONS} takenValue={p2IsHuman ? controlScheme[2] : undefined} accentColor={p1Color} mutedColor={fgMuted} dark={dark} />
-  const p2ControlSchemePicker = p2IsHuman ? <ControlSchemePicker id='p2-controls' host={p2Host} value={controlScheme[2]} onChange={(scheme) => dispatch(gameActions.setControlScheme({ seat: 2, scheme }))} options={CONTROL_SCHEME_OPTIONS} takenValue={controlScheme[1]} accentColor={p2Color} mutedColor={fgMuted} dark={dark} /> : undefined
+  const p1ControlSchemePicker = <ControlSchemePicker id='p1-controls' host={controlsHost} value={controlScheme[1]} onChange={(scheme) => setSettings({ controlScheme: assignControlScheme(controlScheme, 1, scheme) })} options={CONTROL_SCHEME_OPTIONS} takenValue={p2IsHuman ? controlScheme[2] : undefined} accentColor={p1Color} mutedColor={fgMuted} dark={dark} />
+  const p2ControlSchemePicker = p2IsHuman ? <ControlSchemePicker id='p2-controls' host={p2Host} value={controlScheme[2]} onChange={(scheme) => setSettings({ controlScheme: assignControlScheme(controlScheme, 2, scheme) })} options={CONTROL_SCHEME_OPTIONS} takenValue={controlScheme[1]} accentColor={p2Color} mutedColor={fgMuted} dark={dark} /> : undefined
 
   // @tastic/hud@0.9.0 added cpuDifficultyAlignOverride, a pass-through from PlayerSetupPanel down
   // to its own internal LabeledDropdown's pre-existing alignOverride prop — closing the exact gap

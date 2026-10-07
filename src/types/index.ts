@@ -1,4 +1,5 @@
 import { AchievementDefinition as BaseAchievementDefinition, DayStreakState, OutcomeRecord, RoundResult, WinStreakState } from '@tastic/achievements'
+import type { ViewRotation } from '@tastic/core'
 import type { GridCell, GridSize } from '@tastic/grid'
 import { KeyScheme } from '@tastic/input'
 
@@ -190,11 +191,68 @@ export interface SnakeGameState {
   unsafeCells: GridCell[]
 }
 
+// The player's persisted settings (redux/settingsSlice.ts), read and written only through
+// hooks/useSettings.ts. /loadout snapshots them into liveplay.activeRoundSettings when every human
+// player readies up, and /game plays the round from that snapshot.
+export interface Settings {
+  wrapEdges: boolean
+  // Caps the board's own width via @tastic/core's computeContentBounds (see game.tsx and
+  // constants/snake.ts's MAX_BOARD_CONTENT_WIDTH) on a wide desktop-web window, AND keeps the board
+  // within the device's safe area (useSafeAreaInsets: notch/status bar, home indicator), mirroring
+  // LightCycles' "Full Screen"/extendIntoSafeArea toggle in both spirit and scope. false (the
+  // default) caps at MAX_BOARD_CONTENT_WIDTH with centered gutters on either side AND insets the
+  // board within the safe area; true uses the full raw window, ignoring both. Deliberately excluded
+  // from loadout.tsx's "Randomize" shuffle even though its own toggle lives in the same
+  // LoadoutSharedControls row as wrapEdges; see that handler's own comment for why.
+  fullScreen: boolean
+  // null means "no real difficulty has ever been picked yet": the default computer player is no
+  // computer player at all (Solo), not Normal. Distinct from loadout.tsx's own 'none' (a per-round
+  // "skip the CPU this time" choice that's deliberately never persisted, see its own comment): once
+  // a real Easy/Normal/Hard pick lands here, it stays non-null forever after, the same "remember my
+  // real preference" convention gameSlice's lastGuestColor/lastCpuColor use for player colors.
+  cpuDifficulty: CpuDifficulty | null
+  // Lock Orientation, app-wide: _layout.tsx's OrientationBridge hands it to @tastic/core's
+  // OrientationProvider (freezeWhileLocked), which freezes the one shared orientation reading for
+  // every screen, overlay, dialog, the board and touch input alike. No call site reads it to lock
+  // its own view.
+  lockOrientation: boolean
+  // The angle the lock is holding. Written by OrientationProvider's onLockChange (recorded on lock,
+  // cleared on unlock) and handed back as lockInitialValue, so a relaunch reopens in the locked
+  // orientation instead of portrait. Never set by the UI directly; absent while unlocked.
+  lockedRotation?: ViewRotation
+  // iOS-only. Off by default: deliberately opt-in rather than always-on, so it only kicks in for
+  // someone who's actually hit the problem and gone looking for a fix, instead of every player
+  // eating a "swipe twice to go home" surprise from day one. Mirrored into native UserDefaults (see
+  // Providers.tsx's EdgeGuardBridge) for @tastic/edge-guard's own config plugin swizzle to read at
+  // runtime.
+  deferBottomEdgeGestures: boolean
+  // /loadout's own per-seat control-scheme picker (web only, see PlayerSetupPanel's
+  // showControlScheme). Per seat rather than on Profile (unlike LightCycles' Profile.keyScheme)
+  // since Snake's Profile is the shared @tastic/profile package's own type as-is (see
+  // useProfiles.tsx's own comment), so a seat's scheme remembers per seat, independent of whichever
+  // profile (if any) is selected there. The two seats always hold different values (see
+  // utils/keyboardControls.ts's assignControlScheme), since seat 1 and seat 2 can share one
+  // desktop's keyboard/mouse.
+  controlScheme: Record<SnakeId, ControlScheme>
+  // Per-round tick speed, mirroring LightCycles' SpeedTier (see constants/snake.ts's
+  // SNAKE_SPEED_TIER_INTERVAL_MS).
+  speedTier: SnakeSpeedTier
+  // Per-round static obstacle layout, mirroring LightCycles' ArenaVariant (see utils/arenas.ts).
+  arenaVariant: SnakeArenaVariant
+  // Which powerup types can spawn this round. Not a separate on/off flag: "powerups off" is just
+  // an empty array (see snakeEngine.ts's createInitialSnakeState, which only ever spawns from this
+  // list), so a single multi-select control covers both at once. Empty by default: powerups are an
+  // opt-in variant, not a default-on behavior change for existing players.
+  enabledPowerups: SnakePowerupType[]
+  // Per-round cell pixel size, mirroring LightCycles' GridSizeTier (see constants/snake.ts's
+  // SNAKE_CELL_PX).
+  gridSizeTier: SnakeGridSizeTier
+}
+
 // Bundles the per-round settings useSnakeState/createInitialSnakeState need, rather than growing
 // their own signatures to a long, error-prone positional-arg list as this feature set grows. Purely
-// a function-signature convenience — the persisted source of truth stays redux/gameSlice.ts exactly
-// as before (unlike LightCycles, which keeps a parallel AsyncStorage-backed GameSettings object;
-// Snake deliberately consolidated away from that pattern — see gameSlice.ts's own comment).
+// a function-signature convenience over the round's Settings snapshot (see game.tsx), not a second
+// settings home.
 export interface SnakeRoundSettings {
   wrapEdges: boolean
   speedTier: SnakeSpeedTier
