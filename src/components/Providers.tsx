@@ -25,6 +25,7 @@ const FeedbackBridge = ({ children }: Props) => {
   const onChange = useCallback((s: HapticSettings) => dispatch(hapticActions.initialize(s)), [dispatch])
   const onSoundChange = useCallback((s: SoundSettings) => dispatch(soundActions.initialize(s)), [dispatch])
   const { playClick, playPop } = useDefaultSounds()
+
   const bridgeProps = useFeedbackBridgeProps({ initialValue: haptic, onChange, soundInitialValue: sound, onSoundChange, sound: { selection: playClick, notification: playPop } })
   return (
     <FeedbackPressProvider {...bridgeProps} paper={RNPaper}>

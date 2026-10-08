@@ -16,10 +16,10 @@ import { SNAKE_POWERUP_ALL_TYPES, SNAKE_POWERUP_ICONS } from '@/constants/snake'
 import { useProfiles } from '@/hooks/useProfiles'
 import { useSettings } from '@/hooks/useSettings'
 import { SnakeMode } from '@/hooks/useSnakeState'
-import { gameActions } from '@/redux/gameSlice'
 import { liveplayActions } from '@/redux/liveplaySlice'
+import { seatColorsActions } from '@/redux/seatColorsSlice'
 import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
-import type { RootState } from '@/redux/store'
+import type { AppDispatch, RootState } from '@/redux/store'
 import { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
 import { assignControlScheme } from '@/utils/keyboardControls'
 import { safeBack } from '@/utils/navigation'
@@ -130,14 +130,14 @@ export default function LoadoutScreen() {
   const { set: setThemeSettings } = useThemeSettings()
   const { profiles, lastSelected, selectProfile } = useProfiles()
   const { settings, setSettings } = useSettings()
-  const dispatch = useDispatch()
-  const lastGuestColor = useSelector((state: RootState) => state.game.lastGuestColor)
-  const lastCpuColor = useSelector((state: RootState) => state.game.lastCpuColor)
+  const dispatch = useDispatch<AppDispatch>()
+  const lastGuestColor = useSelector((state: RootState) => state.seatColors.lastGuestColor)
+  const lastCpuColor = useSelector((state: RootState) => state.seatColors.lastCpuColor)
   // A manual recolor/clash-swap landing on a seat that currently has a profile selected — see
-  // redux/gameSlice.ts's own profileOverride comment. Persisted (survives navigation and relaunch),
+  // @tastic/profile's createSeatColorsSlice doc on profileOverride. Persisted (survives navigation and relaunch),
   // only cleared when that seat's own selection genuinely changes (handleP1ProfileSelect/
   // handleP2ProfileSelect below), never by merely leaving and returning to this screen.
-  const profileOverride = useSelector((state: RootState) => state.game.profileOverride)
+  const profileOverride = useSelector((state: RootState) => state.seatColors.profileOverride)
   const persistedCpuDifficulty = settings.cpuDifficulty
   // Promoted here from SettingsDialog's own former "BOARD" section (see LoadoutSharedControls'
   // own header comment for why). Persisted in Settings like every other Snake preference.
@@ -179,7 +179,7 @@ export default function LoadoutScreen() {
   const [difficulty, setDifficulty] = useState<CpuDifficultyChoice>(persistedCpuDifficulty ?? 'none')
 
   // (a) A seat with a profile selected shows that profile's own color, unless a manual recolor/
-  // clash-swap has landed an override on it (see redux/gameSlice.ts's own profileOverride comment)
+  // clash-swap has landed an override on it (see @tastic/profile's createSeatColorsSlice doc on profileOverride)
   // — in which case the override wins instead. Refires on every focus (first mount, and coming back
   // to an already-mounted /loadout via the post-game "Loadout" button), so a profile edited
   // elsewhere via /profiles is picked up the instant you're back, and whenever a seat's own selected
@@ -240,7 +240,7 @@ export default function LoadoutScreen() {
   )
 
   // (b)/(c): a profile-selected seat's own recolor now persists too — as that seat's override (see
-  // redux/gameSlice.ts's own profileOverride comment) rather than being silently dropped, so it
+  // @tastic/profile's createSeatColorsSlice doc on profileOverride) rather than being silently dropped, so it
   // survives leaving and returning to /loadout (or a relaunch) the same way a guest's or the CPU's
   // own remembered color already did. A guest and 1 Player's CPU seat 2 still each get their own
   // remembered slot, so a CPU opponent's last color, a human guest's last color, and a profile's own
@@ -248,24 +248,24 @@ export default function LoadoutScreen() {
   const persistP1Color = useCallback(
     (hex: string) => {
       if (p1Profile) {
-        dispatch(gameActions.setProfileOverride({ seat: 1, color: hex }))
+        dispatch(seatColorsActions.setProfileOverride({ seat: 1, color: hex }))
         return
       }
-      dispatch(gameActions.setLastGuestColor({ seat: 1, color: hex }))
+      dispatch(seatColorsActions.setLastGuestColor({ seat: 1, color: hex }))
     },
     [p1Profile, dispatch]
   )
   const persistP2Color = useCallback(
     (hex: string) => {
       if (!p2IsHuman) {
-        dispatch(gameActions.setLastCpuColor(hex))
+        dispatch(seatColorsActions.setLastCpuColor(hex))
         return
       }
       if (p2Profile) {
-        dispatch(gameActions.setProfileOverride({ seat: 2, color: hex }))
+        dispatch(seatColorsActions.setProfileOverride({ seat: 2, color: hex }))
         return
       }
-      dispatch(gameActions.setLastGuestColor({ seat: 2, color: hex }))
+      dispatch(seatColorsActions.setLastGuestColor({ seat: 2, color: hex }))
     },
     [p2IsHuman, p2Profile, dispatch]
   )
@@ -305,19 +305,19 @@ export default function LoadoutScreen() {
 
   // Clears this seat's own persisted override before the new selection takes over, so a manual
   // recolor/clash-swap made under the previous profile (or as a guest) can't leak into whichever
-  // profile just got picked — see redux/gameSlice.ts's own profileOverride comment. selectProfile
+  // profile just got picked — see @tastic/profile's createSeatColorsSlice doc on profileOverride. selectProfile
   // itself only updates lastSelected; the color-sync effect/focus-effect above pick up this seat's
   // freshly-selected profile's own color once profileOverride[seat] has already been cleared here.
   const handleP1ProfileSelect = useCallback(
     (profile: Profile | null) => {
-      dispatch(gameActions.setProfileOverride({ seat: 1, color: null }))
+      dispatch(seatColorsActions.setProfileOverride({ seat: 1, color: null }))
       selectProfile(1, profile?.id ?? null)
     },
     [dispatch, selectProfile]
   )
   const handleP2ProfileSelect = useCallback(
     (profile: Profile | null) => {
-      dispatch(gameActions.setProfileOverride({ seat: 2, color: null }))
+      dispatch(seatColorsActions.setProfileOverride({ seat: 2, color: null }))
       selectProfile(2, profile?.id ?? null)
     },
     [dispatch, selectProfile]

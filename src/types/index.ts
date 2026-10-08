@@ -209,7 +209,7 @@ export interface Settings {
   // computer player at all (Solo), not Normal. Distinct from loadout.tsx's own 'none' (a per-round
   // "skip the CPU this time" choice that's deliberately never persisted, see its own comment): once
   // a real Easy/Normal/Hard pick lands here, it stays non-null forever after, the same "remember my
-  // real preference" convention gameSlice's lastGuestColor/lastCpuColor use for player colors.
+  // real preference" convention the seatColors slice's lastGuestColor/lastCpuColor use for player colors.
   cpuDifficulty: CpuDifficulty | null
   // Lock Orientation, app-wide: _layout.tsx's OrientationBridge hands it to @tastic/core's
   // OrientationProvider (freezeWhileLocked), which freezes the one shared orientation reading for

@@ -10,10 +10,10 @@ import { FLUSH, PAUSE, PERSIST, persistReducer, persistStore, PURGE, REGISTER, R
 import { SNAKE_COLORS } from '@/utils/snakeEngine'
 
 import achievements from './achievementsSlice'
-import game from './gameSlice'
 import guide, { LEGACY_STORAGE_KEYS } from './guideSlice'
 import liveplay from './liveplaySlice'
 import profileSelection from './profileSelectionSlice'
+import seatColors from './seatColorsSlice'
 import settings from './settingsSlice'
 
 const hasError = (action: unknown): action is { error?: unknown } => typeof action === 'object' && action !== null && 'error' in action && Boolean(action.error)
@@ -51,8 +51,8 @@ const rootReducer = combineReducers({
   sound: appSoundReducer,
   // The persisted settings (see settingsSlice.ts).
   settings,
-  // /loadout's per-seat color memory (see gameSlice.ts).
-  game,
+  // The loadout's per-seat color memory (see seatColorsSlice.ts).
+  seatColors,
   // Transient per-round state, the one key blacklisted from persistence below (see liveplaySlice.ts).
   liveplay,
   // The shared App Group roster (see @tastic/profile's resolveInitialProfiles/
