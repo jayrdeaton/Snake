@@ -2,14 +2,10 @@ import { mapUnlocksBySeat, useAchievements } from '@tastic/achievements'
 import { createContext, ReactNode, useCallback, useContext, useMemo } from 'react'
 
 import { ACHIEVEMENT_CATALOG } from '@/constants/achievements'
+import { achievementsActions } from '@/redux/achievementsSlice'
+import type { RootState } from '@/redux/store'
 import { AchievementDefinition, SnakeId, StatsState, UnlockedAchievementsState } from '@/types'
 import { applyRoundOutcome, getProfileStatsView, RoundContext, RoundOutcome } from '@/utils/statsEngine'
-import { DEFAULT_STATS, isValidStats } from '@/utils/statsValidation'
-
-// Produces 'snake.stats' and 'snake.achievements' — the single source of truth for both the
-// achievements screen and the in-round "new high score" banner (see game.tsx's own viewerStats),
-// profile-scoped via `stats.profiles[id]` wherever a specific profile is active.
-const STORAGE_NAMESPACE = 'snake'
 
 // Same fields as statsEngine's own RoundContext, but profileIds is seat-keyed here instead of a
 // flat list — applyRoundOutcome only ever needs the flat list to bump each profile's own bucket
@@ -35,7 +31,6 @@ export interface RecordRoundOutcomeResult {
 interface GameStatsContextValue {
   stats: StatsState
   unlockedAchievements: UnlockedAchievementsState
-  loaded: boolean
   // Returns whatever newly unlocked this round, split device-wide vs per-seat — see
   // RecordRoundOutcomeResult above for why the caller needs both instead of one merged list.
   recordRoundOutcome: (outcome: RoundOutcome, context: RecordRoundOutcomeContext) => RecordRoundOutcomeResult
@@ -49,14 +44,15 @@ function profileViews(stats: StatsState): Record<string, StatsState> {
   return Object.fromEntries(Object.entries(stats.profiles).map(([profileId, bucket]) => [profileId, getProfileStatsView(bucket)]))
 }
 
+// The single source of truth for both the achievements screen and the in-round "new high score"
+// banner (see game.tsx's own viewerStats), profile-scoped via `stats.profiles[id]` wherever a
+// specific profile is active. The data itself lives in the store's `achievements` slice.
 export function GameStatsProvider({ children }: { children: ReactNode }) {
-  const { stats, unlockedAchievements, loaded, recordOutcome, resetAll, removeProfile } = useAchievements<StatsState>({
-    namespace: STORAGE_NAMESPACE,
+  const { stats, unlockedAchievements, recordOutcome, resetAll, removeProfile } = useAchievements<StatsState, RootState>({
     catalog: ACHIEVEMENT_CATALOG,
-    defaultStats: DEFAULT_STATS,
-    isValidStats,
-    profileViews,
-    migrateStats: (stored) => ({ ...stored, profiles: stored.profiles ?? {} })
+    select: (state) => state.achievements,
+    actions: achievementsActions,
+    profileViews
   })
 
   const recordRoundOutcome = useCallback(
@@ -91,7 +87,7 @@ export function GameStatsProvider({ children }: { children: ReactNode }) {
     [removeProfile]
   )
 
-  const value = useMemo(() => ({ stats, unlockedAchievements, loaded, recordRoundOutcome, resetAll, removeProfileStats }), [stats, unlockedAchievements, loaded, recordRoundOutcome, resetAll, removeProfileStats])
+  const value = useMemo(() => ({ stats, unlockedAchievements, recordRoundOutcome, resetAll, removeProfileStats }), [stats, unlockedAchievements, recordRoundOutcome, resetAll, removeProfileStats])
 
   return <GameStatsContext.Provider value={value}>{children}</GameStatsContext.Provider>
 }

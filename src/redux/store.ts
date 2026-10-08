@@ -9,6 +9,7 @@ import { FLUSH, PAUSE, PERSIST, persistReducer, persistStore, PURGE, REGISTER, R
 
 import { SNAKE_COLORS } from '@/utils/snakeEngine'
 
+import achievements from './achievementsSlice'
 import game from './gameSlice'
 import guide, { LEGACY_STORAGE_KEYS } from './guideSlice'
 import liveplay from './liveplaySlice'
@@ -42,6 +43,8 @@ const themeReducer = createThemeReducer({
 })
 
 const rootReducer = combineReducers({
+  // Stats and unlocked achievements (see achievementsSlice.ts).
+  achievements,
   theme: themeReducer,
   scrollView: scrollViewReducer,
   haptic: hapticReducer,

@@ -19,8 +19,8 @@ const slice = createGuideSlice({ currentVersion: GUIDE_VERSION })
 // @tastic/achievements' useAchievements with namespace 'snake' (hooks/useGameStats.tsx) stores
 // `${namespace}.stats` and `${namespace}.achievements`. Literals on purpose, not today's constants: a
 // historical record that must not change if today's code renames something. Nothing today writes
-// either key before PersistGate opens (GameStatsProvider mounts inside it), so a fresh install can't
-// already have one when the migrate runs.
+// either key at all (stats and achievements have lived in the Redux store since 2026-10-07), so a
+// fresh install can't already have one when the migrate runs.
 export const LEGACY_STORAGE_KEYS: readonly string[] = ['snake.stats', 'snake.achievements']
 
 export const guideActions = slice.actions

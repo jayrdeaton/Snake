@@ -95,10 +95,9 @@ const RootLayout = () => {
       This app genuinely wants live tilt tracking, so it does its own real import and hands the
       resolved module in via OrientationBridge's deviceMotion prop. */}
       <OrientationBridge>
-        {/* GameStatsProvider wraps ProfilesProvider, not the other way around, so its own
-        AsyncStorage-backed achievements/stats load starts immediately and independently — it has
-        no lazy-initializer race of its own to guard against (see useGameStats.tsx), so it must
-        stay outside the 'profiles' splash gate ProfilesProvider wraps its children in below.
+        {/* GameStatsProvider wraps ProfilesProvider, not the other way around: stats come straight
+        from the Redux store (already rehydrated under PersistGate), so it has nothing to wait for and
+        stays outside the 'profiles' splash gate ProfilesProvider wraps its children in below.
         Everything ProfilesProvider actually renders (RootNavigator, and every screen it owns,
         /loadout included) sits inside that gate instead. */}
         <GameStatsProvider>
