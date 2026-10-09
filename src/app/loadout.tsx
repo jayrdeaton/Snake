@@ -1,6 +1,7 @@
 import { defaultColors, getThirdColor, useAutoPaperTheme, useThemeSettings } from '@rific/auto-paper'
 import { FakeLandscapeView, getViewRotation, rotateInsets, useOrientationState } from '@tastic/core'
 import { ControlSchemePicker, CornerActionButtons, getColorPopoverId, getCpuDifficultyPopoverId, getInlineColorPickerContentSize, getLabeledDropdownContentHeight, LABELED_DROPDOWN_POPOVER_WIDTH, LabeledDropdownOption, MenuOption, PlayerSetupPanel, PressAwayOverlay, ReadyButton, SharedActionBand, usePopoverHost, useZoneClampedAlign } from '@tastic/hud'
+import { assignSeatScheme } from '@tastic/input'
 import type { Profile } from '@tastic/profile'
 import { DualZoneLayout, needsSharedNeutralZone, useDualZoneLayout } from '@tastic/split-screen'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
@@ -21,7 +22,6 @@ import { seatColorsActions } from '@/redux/seatColorsSlice'
 import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { AppDispatch, RootState } from '@/redux/store'
 import { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
-import { assignControlScheme } from '@/utils/keyboardControls'
 import { safeBack } from '@/utils/navigation'
 import { CpuDifficulty } from '@/utils/snakeAi'
 
@@ -489,8 +489,8 @@ export default function LoadoutScreen() {
   // so a popover from either one still elevates the shared pickerRow correctly. secondPickerId names
   // the popover id it opens under, so PlayerSetupPanel's own "elevate while one of my own popovers
   // is open" logic still reacts to it exactly as it did when this was baked into that component.
-  const p1ControlSchemePicker = <ControlSchemePicker id='p1-controls' host={controlsHost} value={controlScheme[1]} onChange={(scheme) => setSettings({ controlScheme: assignControlScheme(controlScheme, 1, scheme) })} options={CONTROL_SCHEME_OPTIONS} takenValue={p2IsHuman ? controlScheme[2] : undefined} accentColor={p1Color} mutedColor={fgMuted} dark={dark} />
-  const p2ControlSchemePicker = p2IsHuman ? <ControlSchemePicker id='p2-controls' host={p2Host} value={controlScheme[2]} onChange={(scheme) => setSettings({ controlScheme: assignControlScheme(controlScheme, 2, scheme) })} options={CONTROL_SCHEME_OPTIONS} takenValue={controlScheme[1]} accentColor={p2Color} mutedColor={fgMuted} dark={dark} /> : undefined
+  const p1ControlSchemePicker = <ControlSchemePicker id='p1-controls' host={controlsHost} value={controlScheme[1]} onChange={(scheme) => setSettings({ controlScheme: assignSeatScheme(controlScheme, 1, scheme) })} options={CONTROL_SCHEME_OPTIONS} takenValue={p2IsHuman ? controlScheme[2] : undefined} accentColor={p1Color} mutedColor={fgMuted} dark={dark} />
+  const p2ControlSchemePicker = p2IsHuman ? <ControlSchemePicker id='p2-controls' host={p2Host} value={controlScheme[2]} onChange={(scheme) => setSettings({ controlScheme: assignSeatScheme(controlScheme, 2, scheme) })} options={CONTROL_SCHEME_OPTIONS} takenValue={controlScheme[1]} accentColor={p2Color} mutedColor={fgMuted} dark={dark} /> : undefined
 
   // @tastic/hud@0.9.0 added cpuDifficultyAlignOverride, a pass-through from PlayerSetupPanel down
   // to its own internal LabeledDropdown's pre-existing alignOverride prop — closing the exact gap

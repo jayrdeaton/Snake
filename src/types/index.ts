@@ -231,8 +231,8 @@ export interface Settings {
   // since Snake's Profile is the shared @tastic/profile package's own type as-is (see
   // useProfiles.tsx's own comment), so a seat's scheme remembers per seat, independent of whichever
   // profile (if any) is selected there. The two seats always hold different values (see
-  // utils/keyboardControls.ts's assignControlScheme), since seat 1 and seat 2 can share one
-  // desktop's keyboard/mouse.
+  // @tastic/input's assignSeatScheme), since seat 1 and seat 2 can share one desktop's
+  // keyboard/mouse.
   controlScheme: Record<SnakeId, ControlScheme>
   // Per-round tick speed, mirroring LightCycles' SpeedTier (see constants/snake.ts's
   // SNAKE_SPEED_TIER_INTERVAL_MS).
@@ -282,11 +282,13 @@ export interface ProfileStats extends DayStreakState {
   byMode: Record<SnakeMode, SnakeModeStats>
   // Win/loss/draw across the two competitive modes only. Solo rounds never touch this: there's
   // nobody to beat, so counting them as losses would quietly tank every win-rate an achievement
-  // reads. A 2 Player round is recorded from snake 1's perspective, matching GameOverDialog.
+  // reads. The device bucket records a 2 Player round from snake 1's perspective; a profile's own
+  // bucket records it from the seat that profile played in (see statsEngine.ts's applyRoundOutcome).
   versus: OutcomeRecord
   versusStreak: WinStreakState
   byDifficulty: Record<CpuDifficulty, OutcomeRecord>
-  // Longest single snake ever grown, any mode — the length the board actually ended at.
+  // Longest snake ever grown, any mode, by its peakLength. A profile counts only its own seat's
+  // snake and the device bucket the longest human one; the CPU's snake never counts.
   longestSnake: number
 }
 

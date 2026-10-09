@@ -1,8 +1,8 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { IconButton, useVibration } from '@rific/feedback-press'
 import { useToast } from '@rific/toaster'
-import { broadcastDeviceUnlocks } from '@tastic/achievements'
-import { computeContentBounds, FakeLandscapeView, getFixedZoneRotation, getViewRotation, rotateInsets, useOrientationState, useRotation, useSettledWindowDimensions } from '@tastic/core'
+import { broadcastDeviceUnlocks, resultFor } from '@tastic/achievements'
+import { computeContentBounds, FakeLandscapeView, getFixedZoneRotation, getViewRotation, rotateInsets, useBackgroundPause, useOrientationState, useRotation, useSettledWindowDimensions } from '@tastic/core'
 import { computeGridSize } from '@tastic/grid'
 import { type AchievementUnlockOwner, ConfirmDialog, useQuitConfirmation } from '@tastic/hud'
 import { needsSharedNeutralZone } from '@tastic/split-screen'
@@ -14,7 +14,7 @@ import { Text } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useDispatch, useSelector } from 'react-redux'
 
-import { GameOverDialog, type GameOverOutcome } from '@/components/GameOverDialog'
+import { GameOverDialog, type GameOverOutcome, type GameOverSeatResult } from '@/components/GameOverDialog'
 import KeyboardInputLayer from '@/components/KeyboardInputLayer'
 import OnboardingOverlay from '@/components/OnboardingOverlay'
 import { SettingsDialog } from '@/components/SettingsDialog'
@@ -30,8 +30,9 @@ import { SnakeMode, useSnakeState } from '@/hooks/useSnakeState'
 import { liveplayActions } from '@/redux/liveplaySlice'
 import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { RootState } from '@/redux/store'
-import { AchievementDefinition, Direction, GamePhase, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
+import { AchievementDefinition, Direction, GamePhase, ProfileStats, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
 import { safeBack } from '@/utils/navigation'
+import type { SeatRoundOutcome } from '@/utils/statsEngine'
 import { DEFAULT_PROFILE_STATS } from '@/utils/statsValidation'
 
 // A stable, referentially-constant all-zero insets object — see safeAreaInsetsPx's own comment
@@ -108,7 +109,6 @@ export default function GameScreen() {
   // useSnakeState's own safeAreaInsetsPx comment for why: the non-fullScreen boardArea style below
   // already stops short of the inset on its own, so there's nothing left for food/a pickup to avoid.
   const safeAreaInsetsPx = fullScreen ? insets : ZERO_INSETS
-  const { state, turn, activate, beginPlaying, retry, tickIntervalMs } = useSnakeState(grid, mode, roundSettings, cpuDifficulty, colors, cellPx, safeAreaInsetsPx)
 
   // useSnakeState's own outer phase (onboarding -> playing -> gameOver — see that hook's own
   // extensive comment on why this is a different, hook-layer phase from the pure engine's inner
@@ -117,8 +117,35 @@ export default function GameScreen() {
   // onboarding<->playing transition the hook's own internal `phaseIntent` does, since both only
   // ever flip via the same two call sites (beginPlaying / retry) this screen already owns calling.
   // `state.phase` flipping to 'roundOver' (the engine's own one-way transition, driven by
-  // tickSnake) still drives the rest exactly the way it does inside the hook.
+  // tickSnake) still drives the rest exactly the way it does inside the hook, through `phase` below
+  // useSnakeState. Declared up here, ahead of the pause hooks, because useBackgroundPause's getter
+  // reads `phase`: with this state declared after that getter, the React Compiler gives up on
+  // memoizing the whole screen (react-hooks/preserve-manual-memoization warns on handleBeginPlaying
+  // and handleRetry).
   const [localPhase, setLocalPhase] = useState<'onboarding' | 'playing'>('onboarding')
+
+  // Mirrors BoxHockey's/AirHockey's/Pong's/LightCycles' identical onBackPress + ConfirmDialog
+  // pair (rendered near SettingsDialog below): only interrupts with a "Quit Match?" confirmation
+  // when there's an actual score to lose, so backing out of a still-scoreless round (onboarding,
+  // or a round that ended 0-0) exits immediately instead of confirming nothing. Previously this
+  // screen had no confirmation at all: its back button only ever showed during onboarding, where
+  // this same zero-score case already made it a no-op. Now backed by @tastic/hud's shared
+  // useQuitConfirmation (see that hook's own doc for why it owns only confirmVisible/requestBack/
+  // cancelBack, not the ConfirmDialog JSX/copy itself). Called above useSnakeState, like AirHockey's,
+  // because `paused` below (which useSnakeState takes) depends on confirmVisible: the getter reads
+  // humanScore/opponentScore, declared further down from useSnakeState's state, only lazily, inside
+  // a real requestBack() call.
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const { confirmVisible, requestBack, cancelBack } = useQuitConfirmation(() => humanScore > 0 || (opponentScore ?? 0) > 0, safeBack)
+  // Leaving the app mid-match (home, app switch, a phone call, Control Center) latches a pause that
+  // only the Paused dialog's Resume clears - see @tastic/core's useBackgroundPause. Skipped once the
+  // match is over, or while a dialog already holds the pause by itself.
+  const { backgroundPaused, resume } = useBackgroundPause(() => phase !== 'gameOver' && !settingsOpen && !confirmVisible)
+  const paused = settingsOpen || confirmVisible || backgroundPaused
+
+  const { state, turn, activate, beginPlaying, retry, tickIntervalMs } = useSnakeState(grid, mode, roundSettings, cpuDifficulty, colors, cellPx, safeAreaInsetsPx, paused)
+
+  // See localPhase's own comment above.
   const phase: GamePhase = state.phase === 'roundOver' ? 'gameOver' : localPhase
 
   const handleBeginPlaying = useCallback(() => {
@@ -161,23 +188,27 @@ export default function GameScreen() {
     [mode, turn]
   )
 
-  // Hoisted above handleActivate (which needs playActivate) — see the later, single-declaration
-  // comment near playGameOver's own usage for what each function maps to.
+  // Hoisted above handleActivate (which needs playActivate and selection); see the later,
+  // single-declaration comment near playGameOver's own usage for what each function maps to.
   const { playGameOver, playActivate, playPickup } = useSnakeSounds()
+  const { notification, selection } = useVibration()
 
   // Same vsCpu seat-gating as handleTurn above, for the identical reason: the CPU splice inside
   // useSnakeState already decides snake 2's own activation every tick, so a stray activate(2) must
   // never reach it (a backstop, as above: no Vs CPU input source reports seat 2). Only plays the
-  // activate sound for a MEANINGFUL activation (the seat actually had something held): a bare tap
-  // with nothing to use is silent, matching how a no-op activation already produces no visible
-  // effect.
+  // activate sound and haptic for a MEANINGFUL activation (the seat actually had something held): a
+  // bare tap with nothing to use is silent, matching how a no-op activation already produces no
+  // visible effect.
   const handleActivate = useCallback(
     (snakeId: SnakeId) => {
       if (mode === 'vsCpu' && snakeId !== 1) return
-      if (state.snakes.find((s) => s.id === snakeId)?.heldPowerup) playActivate()
+      if (state.snakes.find((s) => s.id === snakeId)?.heldPowerup) {
+        playActivate()
+        selection()
+      }
       activate(snakeId)
     },
-    [mode, activate, state.snakes, playActivate]
+    [mode, activate, state.snakes, playActivate, selection]
   )
 
   // Fires once per snake the instant its heldPowerup transitions from empty to held — a board-wide
@@ -226,56 +257,37 @@ export default function GameScreen() {
   const humanScore = state.snakes[0]?.score ?? 0
   const opponentScore = state.snakes[1]?.score
 
-  // Mirrors BoxHockey's/AirHockey's/Pong's/LightCycles' identical onBackPress + ConfirmDialog
-  // pair (rendered near SettingsDialog below): only interrupts with a "Quit Match?" confirmation
-  // when there's an actual score to lose, so backing out of a still-scoreless round (onboarding,
-  // or a round that ended 0-0) exits immediately instead of confirming nothing. Previously this
-  // screen had no confirmation at all — its back button only ever showed during onboarding, where
-  // this same zero-score case already made it a no-op. Now backed by @tastic/hud's shared
-  // useQuitConfirmation — see that hook's own doc for why it owns only confirmVisible/requestBack/
-  // cancelBack, not the ConfirmDialog JSX/copy itself.
-  const { confirmVisible, requestBack, cancelBack } = useQuitConfirmation(() => humanScore > 0 || (opponentScore ?? 0) > 0, safeBack)
+  // Each seat's own stats bucket: its selected profile's, or the device-wide one for a guest seat,
+  // mirroring how @tastic/achievements' own device-vs-profile scope split works. Each seat's "BEST"
+  // and New High Score on GameOverDialog compare against this, never the other seat's bucket. Two
+  // guest seats share the device one, so a guest's BEST can be the other guest's score.
+  const seatStats = (seat: SnakeId): ProfileStats => (lastSelected[seat] ? (stats.profiles[lastSelected[seat]!] ?? DEFAULT_PROFILE_STATS) : stats)
 
-  // What actually gets persisted as "the" high score for this mode: Solo/Vs CPU track snake 1's
-  // own score only (a strong CPU run in Vs CPU shouldn't inflate "your" high score); 2 Player
-  // tracks whichever of the two human seats actually scored higher this round, since both are
-  // equally "you" on a shared local device.
-  const recordedScore = useMemo(() => (mode === 'twoPlayer' ? Math.max(humanScore, opponentScore ?? 0) : humanScore), [mode, humanScore, opponentScore])
+  // The engine's {type, winnerId} RoundOutcome as the winning seat, or null for a draw (or before
+  // the round has ended).
+  const winner: SnakeId | null = state.outcome?.type === 'win' ? state.outcome.winnerId : null
 
-  // Snake 1's own profile-scoped stats bucket — GameOverDialog's "BEST" is always from this same
-  // single viewer's perspective (see that file's header comment), so the number it beats should be
-  // whichever profile actually sits in that seat, not a device-wide figure every profile shares.
-  // Falls back to the device-wide bucket for guest play (no profile selected in seat 1), mirroring
-  // how @tastic/achievements' own device-vs-profile scope split works.
-  const viewerStats = lastSelected[1] ? (stats.profiles[lastSelected[1]] ?? DEFAULT_PROFILE_STATS) : stats
-
-  // GameOverDialog wants a win/loss/draw framing from snake 1's own perspective ('YOU'/'OPPONENT'
-  // in its own copy — see that file's header comment on why there's no per-seat split even in
-  // 2 Player), not the engine's own {type,winnerId} RoundOutcome shape. Solo has no outcome at
-  // all (undefined renders the plain score framing instead).
-  const gameOverOutcome: GameOverOutcome | undefined = useMemo(() => {
-    if (mode === 'solo' || !state.outcome) return undefined
-    if (state.outcome.type === 'draw') return 'draw'
-    return state.outcome.winnerId === 1 ? 'win' : 'loss'
-  }, [mode, state.outcome])
+  // The single Vs CPU card's win/loss/draw framing, from seat 1's (the human's) perspective. Solo
+  // has no outcome at all (undefined renders the plain score framing instead), and 2 Player's
+  // per-seat cards each get their own (see the GameOverDialog call below).
+  const gameOverOutcome: GameOverOutcome | undefined = mode === 'solo' || !state.outcome ? undefined : resultFor(winner, 1)
 
   // Records stats/achievements exactly once per round, on the onboarding/playing -> gameOver
   // transition. hasRecordedRef (not just the phase check alone) guards against a second dispatch
   // from an unrelated re-render while still in 'gameOver'; it resets the instant the round leaves
   // 'gameOver' (via handleRetry above) so the next round's own transition can fire again.
-  // isNewHighScore is captured once at that same instant (compared against the pre-update
-  // `viewerStats`) rather than derived live every render, so it can't flip from true to false the
-  // moment recordRoundOutcome below actually lands.
+  // newHighScoreSeats is captured once at that same instant (each seat compared against its own
+  // pre-update seatStats bucket) rather than derived live every render, so it can't flip from true
+  // to false the moment recordRoundOutcome below actually lands.
   const hasRecordedRef = useRef(false)
-  const [isNewHighScore, setIsNewHighScore] = useState(false)
-  // 2 Player only — seat -> whatever that seat's own profile newly unlocked this round, read by
-  // GameOverDialog to show each seat's own achievements alongside the score it already displays
-  // (see that component's own achievementUnlocks comment for why: seat 2 sits rotated 180° from
-  // seat 1 in this screen's face-to-face layout, so a shared, screen-fixed showAchievementToast
-  // below it is only ever right-side-up for whoever's seat 1). Always overwritten every round, even
-  // to {}, same as LightCycles' identical profileUnlockToast — GameOverDialog stays on screen far
-  // longer than a toast's own auto-dismiss, so a stale badge from the previous round can't rely on
-  // that to clear itself.
+  const [newHighScoreSeats, setNewHighScoreSeats] = useState<Partial<Record<SnakeId, boolean>>>({})
+  // 2 Player only: seat -> whatever that seat's own profile newly unlocked this round, read by
+  // GameOverDialog to show each seat's own achievements on that seat's own card (seat 2 sits
+  // rotated 180° from seat 1 in this screen's face-to-face layout, so a shared, screen-fixed
+  // showAchievementToast below it is only ever right-side-up for whoever's seat 1). Always
+  // overwritten every round, even to {}, same as LightCycles' identical profileUnlockToast:
+  // GameOverDialog stays on screen far longer than a toast's own auto-dismiss, so a stale badge from
+  // the previous round can't rely on that to clear itself.
   const [achievementUnlocks, setAchievementUnlocks] = useState<Partial<Record<SnakeId, AchievementDefinition[]>>>({})
 
   useEffect(() => {
@@ -286,34 +298,34 @@ export default function GameScreen() {
     if (hasRecordedRef.current) return
     hasRecordedRef.current = true
 
-    setIsNewHighScore(recordedScore > viewerStats.byMode[mode].bestScore)
-
-    // Solo carries no result: there's no opponent, so it stays out of the versus record entirely
-    // (see utils/statsEngine.ts).
-    const result = gameOverOutcome ?? null
-    // peakLength, not live body.length — a Constrict can shrink a body mid-round (see types/index.ts's
-    // own SnakeEntity.peakLength comment), and this stat should credit the high-water mark a snake
-    // actually reached, not whatever it happened to shrink back down to before dying.
-    const snakeLength = Math.max(...state.snakes.map((snake) => snake.peakLength), 0)
-    // Only seats a human actually drives contribute a profile: snake 2 is the CPU in Vs CPU, and
-    // doesn't exist at all in Solo, so neither can carry one. Seat-keyed (not a flattened list) so
-    // recordRoundOutcome can hand unlocks back split by seat below — see its own
-    // RecordRoundOutcomeContext.profileIds comment for why that association has to survive the call.
-    const humanSeats: SnakeId[] = mode === 'twoPlayer' ? [1, 2] : [1]
+    // One entry per seat a human actually drives (humanPlayers): snake 2 is the CPU in Vs CPU, and
+    // doesn't exist at all in Solo, so the CPU's score and length never reach anyone's stats.
+    // peakLength, not live body.length: a Constrict can shrink a body mid-round (see
+    // types/index.ts's own SnakeEntity.peakLength comment), and this stat should credit the
+    // high-water mark a snake actually reached. profileIds is seat-keyed so recordRoundOutcome can
+    // bump each profile from its own seat and hand unlocks back split by seat below.
+    const seats: Partial<Record<SnakeId, SeatRoundOutcome>> = {}
+    const newHighScore: Partial<Record<SnakeId, boolean>> = {}
     const profileIds: Partial<Record<SnakeId, string>> = {}
-    humanSeats.forEach((seat) => {
+    // Every guest seat shares the device-wide bucket, and only the round's top human score lands in
+    // it, so a guest seat that scored less never claims New High Score, even past the old best.
+    const topScore = Math.max(...humanPlayers.map((seat) => state.snakes.find((s) => s.id === seat)?.score ?? 0))
+    for (const seat of humanPlayers) {
+      const snake = state.snakes.find((s) => s.id === seat)
+      const score = snake?.score ?? 0
       const profileId = lastSelected[seat]
+      seats[seat] = { score, snakeLength: snake?.peakLength ?? 0 }
+      newHighScore[seat] = score > seatStats(seat).byMode[mode].bestScore && (Boolean(profileId) || score === topScore)
       if (profileId) profileIds[seat] = profileId
-    })
-    const unlocked = recordRoundOutcome({ mode, score: recordedScore, snakeLength, result }, { cpuDifficulty, profileIds })
+    }
+    setNewHighScoreSeats(newHighScore)
+    const unlocked = recordRoundOutcome({ mode, seats, winner }, { cpuDifficulty, profileIds })
 
-    // Both seats are human and physically opposite each other in 2 Player — broadcast device-wide
-    // unlocks (no seat owner of their own) into BOTH seats' lists, same as LightCycles' identical
-    // broadcast, so GameOverDialog's per-seat rows show them regardless of which seat is "YOU".
-    // Solo/Vs CPU never populate this (see achievementUnlocks' own comment above). Now shared via
-    // @tastic/achievements' own broadcastDeviceUnlocks — note this changes the "nothing unlocked"
-    // shape from {1:[],2:[]} to {}, behaviorally identical at GameOverDialog's own read site
-    // ((achievementUnlocks[seat] ?? []).map(...) and the summed .length check).
+    // Both seats are human and physically opposite each other in 2 Player, so device-wide unlocks
+    // (no seat owner of their own) are broadcast into BOTH seats' lists, same as LightCycles'
+    // identical broadcast, so each seat's GameOverDialog card shows them. Solo/Vs CPU never populate
+    // this (see achievementUnlocks' own comment above). Shared via @tastic/achievements' own
+    // broadcastDeviceUnlocks; a round where nothing unlocked comes back as {}, not {1:[],2:[]}.
     const seatUnlocks: Partial<Record<SnakeId, AchievementDefinition[]>> = mode === 'twoPlayer' ? broadcastDeviceUnlocks([1, 2] as SnakeId[], unlocked.profiles, unlocked.device) : {}
     setAchievementUnlocks(seatUnlocks)
 
@@ -328,15 +340,14 @@ export default function GameScreen() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- state.snakes is read once per gameOver entry, matching the roundOver effect below; adding it would re-run this on every tick.
-  }, [phase, mode, recordedScore, viewerStats, gameOverOutcome, cpuDifficulty, lastSelected, recordRoundOutcome, showAchievementToast])
+  }, [phase, mode, stats, humanPlayers, winner, cpuDifficulty, lastSelected, recordRoundOutcome, showAchievementToast])
 
   // Crash sound + haptic — fires once, the instant the engine's own state.phase (not the derived,
   // onboarding-aware `phase` above) flips into 'roundOver', mirroring LightCycles' own immediate
   // crash sound+haptic (game.tsx there fires on the identical transition, independent of any dialog
   // delay). useSnakeSounds/useVibration each already gate themselves on the user's own sound/haptics
-  // settings, so no extra enabled-check is needed here. playGameOver itself comes from the single
-  // useSnakeSounds() call hoisted up near handleActivate above.
-  const { notification } = useVibration()
+  // settings, so no extra enabled-check is needed here. playGameOver and notification come from the
+  // single useSnakeSounds()/useVibration() calls hoisted up near handleActivate above.
   const hasFiredCrashFeedbackRef = useRef(false)
 
   useEffect(() => {
@@ -358,7 +369,6 @@ export default function GameScreen() {
   // (not just the first) is what makes a simultaneous double-death in 2P/Vs CPU wait for whichever
   // fade takes longer, rather than revealing the dialog over a still-fading loser.
   const [showGameOverDialog, setShowGameOverDialog] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Same condition GameActionChips' own showBack/showSettings use below.
   const controlsVisible = phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)
@@ -370,11 +380,11 @@ export default function GameScreen() {
   // no other way to read. Reset to false on unmount too, so leaving this screen mid-round by any
   // path (not just the in-app back button) can't leave Edge Guard stuck on.
   useEffect(() => {
-    dispatch(liveplayActions.setActivelyPlaying(phase === 'playing'))
+    dispatch(liveplayActions.setActivelyPlaying(phase === 'playing' && !paused))
     return () => {
       dispatch(liveplayActions.setActivelyPlaying(false))
     }
-  }, [phase, dispatch])
+  }, [phase, paused, dispatch])
 
   // No toast may stay on screen during live play — only between rounds or at game over. Unlock
   // toasts fire at game over and last 7s, so a quick Retry would otherwise carry them past the
@@ -413,6 +423,20 @@ export default function GameScreen() {
     2: { profile: profiles.find((p) => p.id === lastSelected[2]), color: state.snakes[1]?.color ?? fgMuted }
   }
 
+  // One 2 Player seat's own card on GameOverDialog: its own result, its score against the other
+  // seat's, and its own bucket's best (see seatStats above).
+  const gameOverSeatResult = (seat: SnakeId): GameOverSeatResult => {
+    const score = state.snakes.find((s) => s.id === seat)?.score ?? 0
+    return {
+      outcome: resultFor(winner, seat),
+      score,
+      opponentScore: state.snakes.find((s) => s.id !== seat)?.score ?? 0,
+      highScore: Math.max(seatStats(seat).byMode.twoPlayer.bestScore, score),
+      isNewHighScore: newHighScoreSeats[seat] ?? false,
+      color: achievementOwners[seat].color
+    }
+  }
+
   // state.grid is already the round's own frozen design resolution — createInitialSnakeState only
   // ever runs again on retry (see useSnakeState.ts), so every snake body/food coordinate laid down
   // this round is already committed to state.grid's own cols/rows and can't safely be rederived from
@@ -440,6 +464,19 @@ export default function GameScreen() {
   const designHeight = state.grid.rows * cellPx
   const boardScale = Math.min(availableWidth / designWidth, availableHeight / designHeight)
 
+  // The Quit Match? and Paused dialogs' shared message. Solo gets its own score-only message (no
+  // opponent to show a "–" pairing against); vsCpu/twoPlayer show both scores in each snake's own
+  // color, same colored-segment convention the other apps use.
+  const progressMessage =
+    mode === 'solo' ? (
+      <Text style={{ color: state.snakes[0]?.color ?? fgMuted }}>Score: {humanScore}</Text>
+    ) : (
+      <>
+        <Text style={{ color: state.snakes[0]?.color ?? fgMuted }}>{humanScore}</Text>
+        <Text style={{ color: fgMuted }}> – </Text>
+        <Text style={{ color: state.snakes[1]?.color ?? fgMuted }}>{opponentScore ?? 0}</Text>
+      </>
+    )
   return (
     <View style={[styles.root, { backgroundColor: bg }]}>
       {/* Hidden only here, not on /loadout or the title screen — matches BoxHockey's/LightCycles'/
@@ -456,15 +493,20 @@ export default function GameScreen() {
       <View style={[styles.boardArea, fullScreen ? styles.boardAreaFullBleed : { top: insets.top, bottom: insets.bottom, left: insets.left + gutterWidth, right: insets.right + gutterWidth }]}>
         <View style={{ width: designWidth, height: designHeight, transform: [{ scale: boardScale }] }}>
           <SnakeBoard snakes={state.snakes} food={state.food} obstacles={state.obstacles} portals={state.portals} tunnels={state.tunnels} pickups={state.pickups} phase={state.phase} cellPx={cellPx} grid={state.grid} tick={state.tick} tickIntervalMs={tickIntervalMs} wrapEdges={wrapEdges} onboarding={phase === 'onboarding'} />
-          <TouchInputLayer mode={touchMode} enabled={phase === 'playing'} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} currentDirections={currentDirections} />
+          <TouchInputLayer mode={touchMode} enabled={phase === 'playing' && !paused} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} currentDirections={currentDirections} />
           {enabledPowerups.length > 0 && <SnakePowerupHud snakes={state.snakes} />}
         </View>
       </View>
-      <KeyboardInputLayer enabled={phase === 'playing'} humanPlayers={humanPlayers} controlScheme={controlScheme} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} currentDirections={currentDirections} />
+      <KeyboardInputLayer enabled={phase === 'playing' && !paused} humanPlayers={humanPlayers} controlScheme={controlScheme} onTurn={handleTurn} onActivate={handleActivate} controlInverted={controlInverted} currentDirections={currentDirections} />
 
-      {phase === 'onboarding' && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} />}
+      {/* Unmounted (rather than merely hidden) while settings, the quit confirmation or the Paused
+      dialog is open: OnboardingOverlay's countdown timers are scheduled once on mount with no pause
+      hook of their own, so unmounting is what stops them ticking underneath any of those dialogs,
+      and remounting on close is what restarts the count from '3' instead of resuming mid-count with
+      stale timers. */}
+      {phase === 'onboarding' && !paused && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} />}
 
-      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(viewerStats.byMode[mode].bestScore, recordedScore)} isNewHighScore={isNewHighScore} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} achievementUnlocks={mode === 'twoPlayer' ? achievementUnlocks : undefined} achievementOwners={achievementOwners} rotation={overlayRotation} />}
+      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(seatStats(1).byMode[mode].bestScore, humanScore)} isNewHighScore={newHighScoreSeats[1] ?? false} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} achievementUnlocks={mode === 'twoPlayer' ? achievementUnlocks : undefined} achievementOwners={achievementOwners} seatResults={mode === 'twoPlayer' && state.outcome ? { 1: gameOverSeatResult(1), 2: gameOverSeatResult(2) } : undefined} rotation={overlayRotation} />}
 
       {/* Kept as its own sibling of the board/gesture tree above, mirroring LightCycles'/BoxHockey's
       identically-motivated MatchOverlays split — this live tilt subscription's re-renders should
@@ -477,31 +519,11 @@ export default function GameScreen() {
 
       {/* Fleet-shared @tastic/hud ConfirmDialog, matching BoxHockey's/AirHockey's/LightCycles'/
       Pong's identical "Quit Match?" prompt — see onBackPress's own comment above for why it's
-      gated on there being an actual score to lose. Solo gets its own score-only message (no
-      opponent to show a "–" pairing against); vsCpu/twoPlayer show both scores in each snake's own
-      color, same colored-segment convention the other apps use. */}
-      <ConfirmDialog
-        visible={confirmVisible}
-        title='Quit Match?'
-        message={
-          mode === 'solo' ? (
-            <Text style={{ color: state.snakes[0]?.color ?? fgMuted }}>Score: {humanScore}</Text>
-          ) : (
-            <>
-              <Text style={{ color: state.snakes[0]?.color ?? fgMuted }}>{humanScore}</Text>
-              <Text style={{ color: fgMuted }}> – </Text>
-              <Text style={{ color: state.snakes[1]?.color ?? fgMuted }}>{opponentScore ?? 0}</Text>
-            </>
-          )
-        }
-        confirmLabel='Quit'
-        cancelLabel='Cancel'
-        icon='alert-circle-outline'
-        destructive={false}
-        onConfirm={safeBack}
-        onCancel={cancelBack}
-        rotation={overlayRotation}
-      />
+      gated on there being an actual score to lose. Its message is progressMessage above. */}
+      <ConfirmDialog visible={confirmVisible} title='Quit Match?' message={progressMessage} confirmLabel='Quit' cancelLabel='Cancel' icon='alert-circle-outline' destructive={false} onConfirm={safeBack} onCancel={cancelBack} rotation={overlayRotation} />
+      {/* Shown when the app comes back from the background mid-match (see useBackgroundPause above):
+      play stays frozen until Resume, so a match never restarts before the player is back and ready. */}
+      <ConfirmDialog visible={backgroundPaused} title='Paused' message={progressMessage} confirmLabel='Resume' cancelLabel='Quit' icon='pause-circle-outline' destructive={false} onConfirm={resume} onCancel={safeBack} rotation={overlayRotation} />
     </View>
   )
 }

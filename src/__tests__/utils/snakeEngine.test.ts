@@ -830,6 +830,107 @@ describe('tickSnake', () => {
       })
     })
   })
+
+  // Regression coverage for F062: Scales used to set effects.shield and nothing ever read it, so a
+  // shielded snake died exactly like an unshielded one. The rule is LightCycles' Shield: one hit
+  // negated, then used up; walls always kill.
+  describe('Scales (shield)', () => {
+    const SHIELD = { shield: { expiresAtTick: 10 }, speed: null, control: null }
+    const cells = (...pairs: [number, number][]): GridCell[] => pairs.map(([x, y]) => ({ x, y }))
+
+    // Snake 1 heads right into (5, 5); snake 2 runs down column 5 through it, its head at (5, 6).
+    function crossingState(p1: Partial<SnakeEntity> = {}, overrides: Partial<SnakeGameState> = {}): SnakeGameState {
+      return makeState({
+        snakes: [snake({ id: 1, body: cells([2, 5], [3, 5], [4, 5]), direction: 'right', ...p1 }), snake({ id: 2, body: cells([5, 2], [5, 3], [5, 4], [5, 5], [5, 6]), direction: 'down' })],
+        food: { x: 0, y: 9 },
+        ...overrides
+      })
+    }
+
+    it('survives an obstacle cell, moving onto it, and uses the shield up', () => {
+      const next = tickSnake(makeState({ snakes: [snake({ id: 1, body: cells([2, 5], [3, 5], [4, 5]), direction: 'right', effects: SHIELD })], obstacles: cells([5, 5]) }))
+      expect(next.snakes[0].alive).toBe(true)
+      expect(next.snakes[0].body).toEqual(cells([3, 5], [4, 5], [5, 5]))
+      expect(next.snakes[0].effects.shield).toBeNull()
+      expect(next.phase).toBe('playing')
+    })
+
+    it("survives the opponent's body and cuts it at the hit cell; a second hit the next tick kills", () => {
+      const next = tickSnake(crossingState({ effects: SHIELD }, { obstacles: cells([6, 5]) }))
+      expect(next.snakes[0].alive).toBe(true)
+      expect(next.snakes[0].body).toEqual(cells([3, 5], [4, 5], [5, 5]))
+      expect(next.snakes[0].effects.shield).toBeNull()
+      // Snake 2 slid down to (5, 7), then lost (5, 5) and everything behind it.
+      expect(next.snakes[1].alive).toBe(true)
+      expect(next.snakes[1].body).toEqual(cells([5, 6], [5, 7]))
+      expect(next.phase).toBe('playing')
+
+      const after = tickSnake(next)
+      expect(after.snakes[0].alive).toBe(false)
+      expect(after.snakes[0].crashCell).toEqual({ x: 6, y: 5 })
+      expect(after.outcome).toEqual({ type: 'win', winnerId: 2 })
+    })
+
+    it('survives running into its own body, which is cut at the hit cell', () => {
+      const state = makeState({ snakes: [snake({ id: 1, body: cells([3, 3], [4, 3], [5, 3], [5, 4], [4, 4]), direction: 'up', effects: SHIELD })] })
+      const next = tickSnake(state)
+      expect(next.snakes[0].alive).toBe(true)
+      expect(next.snakes[0].body).toEqual(cells([5, 3], [5, 4], [4, 4], [4, 3]))
+      expect(next.snakes[0].effects.shield).toBeNull()
+      expect(next.phase).toBe('playing')
+    })
+
+    it('wins a head-on when only one of the two snakes is shielded', () => {
+      const state = makeState({
+        snakes: [snake({ id: 1, body: cells([2, 5], [3, 5], [4, 5]), direction: 'right', effects: SHIELD }), snake({ id: 2, body: cells([8, 5], [7, 5], [6, 5]), direction: 'left' })],
+        food: { x: 0, y: 9 }
+      })
+      const next = tickSnake(state)
+      expect(next.snakes[0].alive).toBe(true)
+      expect(next.snakes[0].body).toEqual(cells([3, 5], [4, 5], [5, 5]))
+      expect(next.snakes[0].effects.shield).toBeNull()
+      expect(next.snakes[1].alive).toBe(false)
+      expect(next.snakes[1].crashCell).toEqual({ x: 5, y: 5 })
+      expect(next.snakes[1].body).toEqual(cells([8, 5], [7, 5], [6, 5]))
+      expect(next.outcome).toEqual({ type: 'win', winnerId: 1 })
+    })
+
+    it('stays a draw when both snakes are shielded in a head-on', () => {
+      const state = makeState({
+        snakes: [snake({ id: 1, body: cells([2, 5], [3, 5], [4, 5]), direction: 'right', effects: SHIELD }), snake({ id: 2, body: cells([8, 5], [7, 5], [6, 5]), direction: 'left', effects: SHIELD })],
+        food: { x: 0, y: 9 }
+      })
+      const next = tickSnake(state)
+      expect(next.snakes[0].alive).toBe(false)
+      expect(next.snakes[1].alive).toBe(false)
+      expect(next.outcome).toEqual({ type: 'draw' })
+    })
+
+    it('never negates a wall: a shielded snake running off the board still dies', () => {
+      const next = tickSnake(makeState({ snakes: [snake({ id: 1, body: cells([7, 5], [8, 5], [9, 5]), direction: 'right', effects: SHIELD })] }))
+      expect(next.snakes[0].alive).toBe(false)
+      expect(next.snakes[0].crashCell).toEqual({ x: 10, y: 5 })
+      expect(next.phase).toBe('roundOver')
+    })
+
+    it('does not protect once the tick is past expiresAtTick', () => {
+      const state = makeState({ tick: 5, snakes: [snake({ id: 1, body: cells([2, 5], [3, 5], [4, 5]), direction: 'right', effects: { ...SHIELD, shield: { expiresAtTick: 5 } } })], obstacles: cells([5, 5]) })
+      const next = tickSnake(state)
+      expect(next.snakes[0].alive).toBe(false)
+      expect(next.snakes[0].crashCell).toEqual({ x: 5, y: 5 })
+    })
+
+    // The score used to be read off how much the body grew, which a same-tick trim would cancel out.
+    it('still scores and respawns food when the snake that ate is cut in the same tick', () => {
+      const next = tickSnake(crossingState({ effects: SHIELD }, { food: { x: 5, y: 7 } }), fixedRandom(0))
+      expect(next.snakes[1].alive).toBe(true)
+      expect(next.snakes[1].body).toEqual(cells([5, 6], [5, 7]))
+      expect(next.snakes[1].score).toBe(1)
+      expect(next.food).not.toEqual({ x: 5, y: 7 })
+      expect(next.snakes[0].alive).toBe(true)
+      expect(next.snakes[0].score).toBe(0)
+    })
+  })
 })
 
 describe('applySnakePowerupActivation', () => {

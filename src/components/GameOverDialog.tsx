@@ -1,5 +1,6 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { Button } from '@rific/feedback-press'
+import { getFixedZoneRotation, getOpposingZoneRotation, useOrientationState } from '@tastic/core'
 import { AchievementUnlockList, type AchievementUnlockOwner } from '@tastic/hud'
 import { StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
@@ -7,11 +8,21 @@ import { Icon, Text } from 'react-native-paper'
 import { ACHIEVEMENT_TIER_COLORS } from '@/constants/achievements'
 import { AchievementDefinition, SnakeId } from '@/types'
 
-// The two-rival modes' result, from the single viewer's own perspective — Vs CPU and 2 Player both
-// pass this straight in rather than a richer per-seat winner id, since this dialog (unlike
-// LightCycles' RoundOverDialog) is always ONE centered card, never a per-seat split (see this
-// file's own header comment on why).
+// A two-rival round's result from one seat's own perspective: the single Vs CPU card's (seat 1,
+// the only human) or one 2 Player seat's card's (see GameOverSeatResult).
 export type GameOverOutcome = 'win' | 'loss' | 'draw'
+
+// Everything one 2 Player seat's own card shows, all from that seat's point of view: its result,
+// its score against the other seat's, and its own bucket's best (see game.tsx's seatStats).
+export interface GameOverSeatResult {
+  outcome: GameOverOutcome
+  score: number
+  opponentScore: number
+  highScore: number
+  isNewHighScore: boolean
+  // The seat's snake color: tints its zone and its Retry button.
+  color: string
+}
 
 export interface GameOverDialogProps {
   score: number
@@ -23,32 +34,38 @@ export interface GameOverDialogProps {
   // renders a win/loss/draw framing instead, still showing both scores.
   outcome?: GameOverOutcome | null
   opponentScore?: number
-  // 2 Player only — seat -> whatever that seat's own profile newly unlocked this round (see
-  // game.tsx's own achievementUnlocks state). Solo/Vs CPU never pass this: both still surface
-  // unlocks via the existing screen-fixed showAchievementToast instead (only one human perspective
-  // to address in either — see game.tsx's own comment on why 2 Player can't reuse that same toast).
-  // Rendered as its own row per achievement rather than a second, per-seat-rotated card: this
-  // dialog never splits into a per-seat layout (see this file's own header comment above), so a
-  // seat's unlocks are marked with that seat's own avatar (see achievementOwners) instead of being
-  // re-oriented to face them — still an improvement over a toast that auto-dismissed before seat 2
-  // could even turn the device around to read it.
+  // 2 Player only: seat -> whatever that seat's own profile newly unlocked this round (see
+  // game.tsx's own achievementUnlocks state), each seat's own card summing up its own in one line.
+  // Solo/Vs CPU never pass this: both still surface unlocks via the existing screen-fixed
+  // showAchievementToast instead (only one human perspective to address in either).
   achievementUnlocks?: Partial<Record<SnakeId, AchievementDefinition[]>>
-  // Whose avatar marks each seat's unlock rows: the seat's selected profile, else its snake color.
+  // Whose avatar marks each seat's unlock rows on the single card: the seat's selected profile, else
+  // its snake color. The per-seat cards' one-line summary doesn't use it.
   achievementOwners?: Record<SnakeId, AchievementUnlockOwner>
-  // Live physical-hold rotation (see @tastic/core's getViewRotation) — this is a single centered
-  // card with no per-seat zone to match (see this file's own header comment), so it just rotates its
-  // own content in place; defaults to 0 for call sites with no live orientation signal handy.
+  // 2 Player only: present, it replaces the single card with one card per seat, each in that
+  // seat's own zone and facing that seat (see the split branch below). score/highScore/
+  // isNewHighScore/outcome/opponentScore above then go unused.
+  seatResults?: Record<SnakeId, GameOverSeatResult>
+  // Live physical-hold rotation (see @tastic/core's getViewRotation) for the single centered card,
+  // which has no per-seat zone to match, so it just rotates its own content in place; defaults to 0
+  // for call sites with no live orientation signal handy. The per-seat cards ignore it and rotate
+  // like OnboardingOverlay's two zones instead.
   rotation?: number
 }
 
 const SEATS: readonly SnakeId[] = [1, 2]
 
-// Styled after LightCycles' RoundOverDialog.tsx — specifically its single-human centered-card
-// branch (icon + text + buttons in one centered overlay card) — NOT its two-player per-seat split
-// branch: Snake's two-rival modes still only ever show one dialog to whoever is looking at the
-// device between passes, so there's no second physical viewer to rotate a second card for.
-export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHome, outcome, opponentScore, achievementUnlocks, achievementOwners, rotation = 0 }: GameOverDialogProps) {
+// Styled after LightCycles' RoundOverDialog.tsx. Solo and Vs CPU have one human, so they get its
+// single centered card (icon + text + buttons). 2 Player is simultaneous split-screen, both players
+// at the device at once, often face to face, so it gets the per-seat split instead: one compact card
+// per seat in that seat's own zone, each telling its own player whether they won, with their own
+// score, best and unlocks, and its own Quit/Retry (either seat's press acts at once, as the single
+// card's does; there is no LightCycles-style Rematch handshake).
+export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHome, outcome, opponentScore, achievementUnlocks, achievementOwners, seatResults, rotation = 0 }: GameOverDialogProps) {
   const { colors, dark } = useAutoPaperTheme()
+  // Read unconditionally (hooks can't sit behind the seatResults branch below); only the split
+  // branch uses it.
+  const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
   const cardBg = dark ? '#111111' : '#F2F2F2'
   const cardBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
   const fg = dark ? '#FFFFFF' : '#000000'
@@ -58,6 +75,88 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
   // pair) — a neutral gray reads as clearly secondary regardless of theme.
   const homeBg = dark ? '#2A2A2A' : '#E0E0E0'
   const homeFg = dark ? '#FFFFFF' : '#000000'
+
+  if (seatResults) {
+    // OnboardingOverlay's two-zone split and rotations exactly (face-to-face: snake 1 near/bottom,
+    // snake 2 far/top; side-by-side: by p1OnRight), so each card lands where that seat's countdown
+    // and touch zone were, facing the same way.
+    const isFaceToFace = orientationMode === 'faceToFace'
+    const snake1Zone = isFaceToFace ? styles.zoneBottom : p1OnRight ? styles.zoneRight : styles.zoneLeft
+    const snake2Zone = isFaceToFace ? styles.zoneTop : p1OnRight ? styles.zoneLeft : styles.zoneRight
+    const snake1Rotation = getFixedZoneRotation(orientationMode, p1OnRight, upsideDown)
+    const snake2Rotation = getOpposingZoneRotation(snake1Rotation)
+    const onColors: Record<SnakeId, string> = { 1: colors.onPrimary, 2: colors.onSecondary }
+
+    const renderCard = (seat: SnakeId, cardRotation: number) => {
+      const result = seatResults[seat]
+      const { text, icon, color } = result.outcome === 'win' ? { color: result.color, icon: 'trophy', text: 'YOU WIN!' } : result.outcome === 'draw' ? { color: fgMuted, icon: 'handshake-outline', text: 'DRAW' } : { color: fgMuted, icon: 'skull-outline', text: 'YOU LOSE!' }
+      const unlocked = achievementUnlocks?.[seat]
+      return (
+        <View style={[styles.zoneCard, { backgroundColor: cardBg, borderColor: cardBorder }, cardRotation % 360 !== 0 && { transform: [{ rotate: `${cardRotation}deg` }] }]}>
+          <Icon source={icon} size={28} color={color} />
+          <Text variant='headlineSmall' style={[styles.title, { color }]}>
+            {text}
+          </Text>
+          <View style={styles.scoreRow}>
+            <View style={styles.scoreColumn}>
+              <Text variant='labelSmall' style={{ color: fgMuted }}>
+                YOU
+              </Text>
+              <Text variant='headlineSmall' style={{ color: fg }}>
+                {result.score}
+              </Text>
+            </View>
+            <View style={styles.scoreColumn}>
+              <Text variant='labelSmall' style={{ color: fgMuted }}>
+                OPPONENT
+              </Text>
+              <Text variant='headlineSmall' style={{ color: fg }}>
+                {result.opponentScore}
+              </Text>
+            </View>
+          </View>
+          {result.isNewHighScore ? (
+            <View style={styles.zoneHighScoreBadge}>
+              <Icon source='trophy-award' size={16} color={result.color} />
+              <Text variant='labelSmall' style={{ color: result.color }}>
+                New High Score!
+              </Text>
+            </View>
+          ) : (
+            <Text variant='bodySmall' style={{ color: fgMuted }}>
+              BEST {result.highScore}
+            </Text>
+          )}
+          {/* One line, like RoundOverDialog's own badge, rather than a row per unlock: device-wide
+          unlocks land on both cards, so a first round can list several, and a taller card than half
+          a short phone gets clipped by its zone, buttons included. */}
+          {unlocked && unlocked.length > 0 && (
+            <View style={styles.achievementBadge}>
+              <Icon source='trophy-award' size={16} color={result.color} />
+              <Text variant='labelSmall' style={{ color: result.color }}>
+                {unlocked.length === 1 ? `${unlocked[0].title} unlocked!` : `${unlocked.length} achievements unlocked!`}
+              </Text>
+            </View>
+          )}
+          {/* Quit before Retry: this card is rotated to face its own seat, which puts the button
+          authored LAST nearest that player's hands, same as the single card below. */}
+          <Button mode='contained' onPress={onHome} style={styles.zoneButton} labelStyle={styles.zoneButtonLabel} buttonColor={homeBg} textColor={homeFg}>
+            Quit
+          </Button>
+          <Button mode='contained' onPress={onRetry} style={styles.zoneButton} labelStyle={styles.zoneButtonLabel} buttonColor={result.color} textColor={onColors[seat]}>
+            Retry
+          </Button>
+        </View>
+      )
+    }
+
+    return (
+      <View style={styles.overlay}>
+        <View style={[styles.zone, snake1Zone, { borderColor: seatResults[1].color, backgroundColor: `${seatResults[1].color}22` }]}>{renderCard(1, snake1Rotation)}</View>
+        <View style={[styles.zone, snake2Zone, { borderColor: seatResults[2].color, backgroundColor: `${seatResults[2].color}22` }]}>{renderCard(2, snake2Rotation)}</View>
+      </View>
+    )
+  }
 
   const solo = outcome === null || outcome === undefined
   const { text, icon, color } = solo ? { color: fgMuted, icon: 'skull-outline', text: 'GAME OVER' } : outcome === 'win' ? { color: colors.primary, icon: 'trophy', text: 'YOU WIN!' } : outcome === 'draw' ? { color: fgMuted, icon: 'handshake-outline', text: 'DRAW' } : { color: fgMuted, icon: 'skull-outline', text: 'YOU LOSE!' }
@@ -127,6 +226,13 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
 }
 
 const styles = StyleSheet.create({
+  // RoundOverDialog's achievementBadge.
+  achievementBadge: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: -2
+  },
   achievementList: { maxWidth: 260 },
   button: { width: 160 },
   card: {
@@ -164,5 +270,35 @@ const styles = StyleSheet.create({
   // displaySmall/headlineLarge's own line-height leaves slack under the glyphs that the card's flex
   // `gap` stacks on top of — clawed back the same way RoundOverDialog's own overlayTitle does.
   soloScore: { fontWeight: 'bold', marginTop: -8 },
-  title: { fontWeight: 'bold', marginBottom: -8 }
+  title: { fontWeight: 'bold', marginBottom: -8 },
+  // The per-seat split below matches RoundOverDialog's zone/zoneCard/zoneButton styles. A seat's
+  // zone is half the screen, so the card is compact, and overflow: 'hidden' clips an extreme case
+  // at the zone's edge instead of letting the two cards overlap at the seam.
+  zone: {
+    alignItems: 'center',
+    borderStyle: 'dashed',
+    borderWidth: 3,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'absolute'
+  },
+  zoneBottom: { bottom: 0, left: 0, right: 0, top: '50%' },
+  zoneButton: { width: 130 },
+  // Claws back react-native-paper's default label margin so a full card fits half a short screen.
+  zoneButtonLabel: { marginVertical: 4 },
+  zoneCard: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    padding: 14
+  },
+  zoneHighScoreBadge: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4
+  },
+  zoneLeft: { bottom: 0, left: 0, right: '50%', top: 0 },
+  zoneRight: { bottom: 0, left: '50%', right: 0, top: 0 },
+  zoneTop: { bottom: '50%', left: 0, right: 0, top: 0 }
 })

@@ -46,17 +46,7 @@
       }
     },
     "android": {
-      "package": "com.infinitetoken.snake",
-      "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
-      ]
+      "package": "com.infinitetoken.snake"
     },
     "plugins": [
       "expo-router",
@@ -75,9 +65,17 @@
         }
       ],
       "expo-asset",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
       "@tastic/edge-guard",
-      "expo-status-bar"
+      "expo-status-bar",
+      "@tastic/core"
     ],
     "extra": {
       "router": {},

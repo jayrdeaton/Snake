@@ -1,63 +1,86 @@
-import { applyDayPlayed, applyResult, applyResultToBucket, applyWinStreak, countBucketsWithAWin, OutcomeRecord, RoundResult } from '@tastic/achievements'
+import { applyDayPlayed, applyResult, applyResultToBucket, applyWinStreak, countBucketsWithAWin, OutcomeRecord, resultFor, RoundResult } from '@tastic/achievements'
 import { Profile } from '@tastic/profile'
 
 import { SnakeMode } from '@/hooks/useSnakeState'
-import { ProfileStats, StatsState } from '@/types'
+import { ProfileStats, SnakeId, StatsState } from '@/types'
 import { CpuDifficulty } from '@/utils/snakeAi'
 import { DEFAULT_PROFILE_STATS, SNAKE_MODES } from '@/utils/statsValidation'
 
-// One finished round, from snake 1's perspective — the same framing GameOverDialog uses.
+// One human seat's own numbers for a finished round.
+export interface SeatRoundOutcome {
+  score: number
+  // peakLength, the longest that seat's snake grew this round (see types/index.ts's
+  // SnakeEntity.peakLength), not whatever it shrank back to before the round ended.
+  snakeLength: number
+}
+
+// One finished round, seat by seat.
 export interface RoundOutcome {
   mode: SnakeMode
-  // The score this round is recorded at (2 Player uses the higher of the two — see game.tsx's
-  // own recordedScore).
-  score: number
-  // Longest snake on the board when the round ended.
-  snakeLength: number
-  // Solo has no opponent, so it carries no result at all.
-  result: RoundResult | null
+  // Only human-driven seats: seat 1 always, seat 2 only in 2 Player. Vs CPU's CPU snake never
+  // appears here, so its score and length can't count toward anyone's stats.
+  seats: Partial<Record<SnakeId, SeatRoundOutcome>>
+  // null for a draw. Ignored in Solo, which has no opponent and so no result at all.
+  winner: SnakeId | null
 }
 
 export interface RoundContext {
   cpuDifficulty: CpuDifficulty
-  profileIds?: string[]
+  // Seat -> profile id, only for seats with a profile selected this round. Each profile is bumped
+  // from its own seat's numbers and result.
+  profileIds?: Partial<Record<SnakeId, string>>
 }
 
-function bumpBucket(prev: ProfileStats, outcome: RoundOutcome, context: RoundContext, now: Date): ProfileStats {
-  const mode = prev.byMode[outcome.mode]
-  const isVersus = outcome.mode !== 'solo' && outcome.result !== null
+// This round's result from one seat's point of view, or null in Solo (nobody to beat).
+function seatResult(outcome: RoundOutcome, seat: SnakeId): RoundResult | null {
+  if (outcome.mode === 'solo') return null
+  return resultFor(outcome.winner, seat)
+}
+
+function bumpBucket(prev: ProfileStats, mode: SnakeMode, seat: SeatRoundOutcome, result: RoundResult | null, context: RoundContext, now: Date): ProfileStats {
+  const modeStats = prev.byMode[mode]
 
   return {
     byMode: {
       ...prev.byMode,
-      [outcome.mode]: {
-        played: mode.played + 1,
-        bestScore: Math.max(mode.bestScore, outcome.score),
-        totalScore: mode.totalScore + outcome.score
+      [mode]: {
+        played: modeStats.played + 1,
+        bestScore: Math.max(modeStats.bestScore, seat.score),
+        totalScore: modeStats.totalScore + seat.score
       }
     },
-    // Solo never touches the versus record — there's nobody to beat, and counting solo rounds as
-    // losses would quietly tank every win rate an achievement reads.
-    versus: isVersus ? applyResult(prev.versus, outcome.result!) : prev.versus,
-    versusStreak: isVersus ? applyWinStreak(prev.versusStreak, outcome.result!) : prev.versusStreak,
-    byDifficulty: outcome.mode === 'vsCpu' && outcome.result !== null ? (applyResultToBucket(prev.byDifficulty, context.cpuDifficulty, outcome.result) as Record<CpuDifficulty, OutcomeRecord>) : prev.byDifficulty,
-    longestSnake: Math.max(prev.longestSnake, outcome.snakeLength),
+    // Solo never touches the versus record (its result is null): there's nobody to beat, and
+    // counting solo rounds as losses would quietly tank every win rate an achievement reads.
+    versus: result !== null ? applyResult(prev.versus, result) : prev.versus,
+    versusStreak: result !== null ? applyWinStreak(prev.versusStreak, result) : prev.versusStreak,
+    byDifficulty: mode === 'vsCpu' && result !== null ? (applyResultToBucket(prev.byDifficulty, context.cpuDifficulty, result) as Record<CpuDifficulty, OutcomeRecord>) : prev.byDifficulty,
+    longestSnake: Math.max(prev.longestSnake, seat.snakeLength),
     ...applyDayPlayed(prev, now)
   }
 }
 
 // `now` defaults to the real clock — overridable so tests can drive day boundaries directly.
 export function applyRoundOutcome(prev: StatsState, outcome: RoundOutcome, context: RoundContext, now: Date = new Date()): StatsState {
+  const deviceResult = seatResult(outcome, 1)
   const isFirstEver = getTotalPlayed(prev) === 0
   // A solo round resolves as a draw for this one-time flag: with no opponent, neither 'win' nor
   // 'loss' would be true of it.
-  const firstGameResult = isFirstEver ? (outcome.result ?? 'draw') : prev.firstGameResult
+  const firstGameResult = isFirstEver ? (deviceResult ?? 'draw') : prev.firstGameResult
 
-  const base = bumpBucket(prev, outcome, context, now)
+  // The device bucket counts the round once for "either human": the best score and longest snake
+  // any human seat reached, with seat 1's result (the device's versus record stays seat 1's view).
+  const humanSeats = Object.values(outcome.seats).filter((seat): seat is SeatRoundOutcome => seat !== undefined)
+  const deviceSeat: SeatRoundOutcome = { score: Math.max(0, ...humanSeats.map((seat) => seat.score)), snakeLength: Math.max(0, ...humanSeats.map((seat) => seat.snakeLength)) }
+  const base = bumpBucket(prev, outcome.mode, deviceSeat, deviceResult, context, now)
 
+  // Each profile is bumped from the seat it played in, so in 2 Player the loser's profile records
+  // its own loss and its own score, not seat 1's.
   let profiles = prev.profiles
-  for (const profileId of context.profileIds ?? []) {
-    profiles = { ...profiles, [profileId]: bumpBucket(profiles[profileId] ?? DEFAULT_PROFILE_STATS, outcome, context, now) }
+  for (const seat of [1, 2] as SnakeId[]) {
+    const profileId = context.profileIds?.[seat]
+    const seatOutcome = outcome.seats[seat]
+    if (!profileId || !seatOutcome) continue
+    profiles = { ...profiles, [profileId]: bumpBucket(profiles[profileId] ?? DEFAULT_PROFILE_STATS, outcome.mode, seatOutcome, seatResult(outcome, seat), context, now) }
   }
 
   return { ...base, profiles, firstGameResult }

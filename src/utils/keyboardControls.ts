@@ -1,6 +1,6 @@
 import { resolveSchemeDirection } from '@tastic/input'
 
-import { ControlScheme, Direction, SnakeId } from '@/types'
+import { ControlScheme, Direction } from '@/types'
 
 // The one shared entry point KeyboardInputLayer routes every keydown through. 'mouse' (the scheme
 // with no keys of its own — see types/index.ts's own ControlScheme doc) always resolves to null,
@@ -27,16 +27,4 @@ export function resolveControlSchemeActivate(event: Pick<KeyboardEvent, 'key' | 
   if (scheme === 'mouse') return false
   if (scheme === 'numpad') return event.code === 'NumpadEnter'
   return event.key.toLowerCase() === ACTIVATE_KEYS[scheme]
-}
-
-// The controlScheme pair that results from `seat` picking `scheme`. Swap-on-conflict, the same
-// shape as LightCycles' lobby handleP1KeySchemeChange/handleP2KeySchemeChange: picking the scheme
-// the other seat already has hands that seat this seat's old one. In 2 Player the picker disables
-// the other seat's scheme (takenValue), so this only fires from 1 Player, where seat 2's picker is
-// hidden. Without it, a 1 Player pick of seat 2's saved scheme (WASD by default) left both seats on
-// it, and in a later 2 Player game KeyboardInputLayer sent every one of those keys to seat 1.
-export function assignControlScheme(current: Record<SnakeId, ControlScheme>, seat: SnakeId, scheme: ControlScheme): Record<SnakeId, ControlScheme> {
-  const other: SnakeId = seat === 1 ? 2 : 1
-  const otherScheme = current[other] === scheme ? current[seat] : current[other]
-  return { [seat]: scheme, [other]: otherScheme } as Record<SnakeId, ControlScheme>
 }

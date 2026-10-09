@@ -9,15 +9,15 @@ import { useSettings } from '@/hooks/useSettings'
 export interface SettingsDialogProps {
   visible: boolean
   onDismiss: () => void
-  // Live physical-hold rotation (see @tastic/core's getViewRotation) — this is a centered,
-  // app-wide modal with no per-player zone to match (unlike OnboardingOverlay/RoundOverDialog), so
-  // it just rotates its own content in place; defaults to 0 for call sites that don't have a live
-  // orientation signal handy (there's nothing else for it to stay consistent with).
+  // Live physical-hold rotation (see @tastic/core's useRotation). BaseSettingsDialog lays the sheet
+  // out in its own frame turned by this (see @tastic/hud's RotatedFrame), so it reads right-side-up
+  // and fits the short edge however the phone is held. Defaults to 0 for a call site that doesn't
+  // track one.
   rotation?: ViewRotation
   // Shows the "How to Play" row that replays the intro. Off by default: the in-game (/game) dialog
-  // leaves it out, since it's reachable during the 3-2-1 countdown (which keeps running behind it)
-  // and a full-screen guide doesn't belong over a match. Home and /loadout, where nothing is
-  // running, turn it on.
+  // leaves it out, since it's reachable during the 3-2-1 countdown (which stops while Settings is
+  // open and restarts from 3 when it closes) and a full-screen guide doesn't belong over a match.
+  // Home and /loadout, where nothing is running, turn it on.
   showHowToPlay?: boolean
 }
 

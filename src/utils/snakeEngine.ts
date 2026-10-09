@@ -212,10 +212,29 @@ function expireEffects(effects: SnakeEntity['effects'], tick: number): SnakeEnti
 }
 
 // Slices `count` cells off the front (the tail end — see SnakeEntity.body's own convention),
-// clamped so the head is never removed. Shared by Constrict's instant application below.
+// clamped so the head is never removed. Shared by Constrict's instant application below and
+// Scales' break-through trim (see trimSnakeBodyAtCell).
 function trimSnakeBodyFront(body: GridCell[], count: number): GridCell[] {
   const maxRemovable = body.length - 1
   return body.slice(Math.min(count, maxRemovable))
+}
+
+// Scales' break-through variant, mirroring LightCycles' trimTrailAtCell: destroys everything
+// at-or-behind `cell` (the point a shielded snake just punched through), keeping only the newer
+// part of the body. Clamped through trimSnakeBodyFront, so the body's own head always survives
+// even if `cell` happens to be it.
+function trimSnakeBodyAtCell(body: GridCell[], cell: GridCell): GridCell[] {
+  const index = body.findIndex((c) => c.x === cell.x && c.y === cell.y)
+  if (index === -1) return body
+  return trimSnakeBodyFront(body, index + 1)
+}
+
+// Which body (index into `bodies`) a shielded snake broke through at `cell`, or -1 for an obstacle.
+// Runs after the breaker's own move has committed, so the breaker's new head (its last cell, which
+// is `cell` itself) is skipped; anything else at `cell`, including an older cell of the breaker's
+// own body, is what it broke through.
+function locateBrokenBody(bodies: GridCell[][], cell: GridCell, breaker: number): number {
+  return bodies.findIndex((body, k) => body.some((c, idx) => (k !== breaker || idx < body.length - 1) && c.x === cell.x && c.y === cell.y))
 }
 
 // Activation-side counterpart to applySnakeTurnIntent — the single choke point a held powerup's
@@ -294,13 +313,18 @@ export function applySnakePowerupActivation(state: SnakeGameState, snakeId: Snak
 // snakes actually stepping this sub-step → body/obstacle collision against every not-already-dead
 // snake's CURRENT body minus `vacating`, with a tunnel-member destination exempted from this check
 // entirely (see types/index.ts's own SnakeTunnel comment for why no per-snake exclusion layer is
-// needed here, unlike LightCycles' equivalent). If anyone dies this sub-step, their crashCell is
-// recorded and the loop stops WITHOUT committing anyone's move for this sub-step — a still-alive
-// snake's own partial movement on the sub-step where someone else died is dropped too, which is
-// invisible since the round is already over the instant anyone dies. Otherwise, each stepping
-// snake's move commits (grow-and-keep-tail if it landed on food, slide otherwise), then pickup
-// collection is checked at the exact landed cell, snake-index order, so at most one snake can
-// claim a given pickup in one sub-step.
+// needed here, unlike LightCycles' equivalent). Scales (an active shield: tick <= its
+// expiresAtTick) negates one hit and is used up by it, the same rule as LightCycles' Shield. Walls
+// and out-of-bounds always kill. A head-on where exactly one of the two is shielded is won by the
+// shielded snake, which moves into the cell while the other dies; both or neither shielded stays a
+// mutual crash. A shielded body or obstacle hit survives and moves into the cell (breaking
+// through), and the body it hit, if it belongs to a live snake (the breaker's own included), loses
+// every cell at or behind the hit cell. If anyone dies this sub-step, their crashCell is recorded
+// and their own move never commits, while every survivor's move still does; the loop then stops,
+// since the round is over the instant anyone dies. Otherwise, each stepping snake's move commits
+// (grow-and-keep-tail if it landed on food, slide otherwise), then pickup collection is checked at
+// the exact landed cell, snake-index order, so at most one snake can claim a given pickup in one
+// sub-step. Break-through trims apply after the commits on both paths.
 export function tickSnake(state: SnakeGameState, random: () => number = Math.random): SnakeGameState {
   if (state.phase !== 'playing') return state
 
@@ -323,6 +347,11 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
   const crashCell: (GridCell | null)[] = snakes.map((s) => s.crashCell)
   const heldPowerup = snakes.map((s) => s.heldPowerup)
   const bodies = snakes.map((s) => s.body)
+  // Scales is used up mid-tick, so each snake's effects are tracked here and written back below.
+  const effects = snakes.map((s) => s.effects)
+  // Food eaten this tick, counted as each growing move commits: a break-through trim can shrink a
+  // body in the same tick, so the score can't be read off the change in length.
+  const foodEaten = snakes.map(() => 0)
   let pickups = state.pickups
   let food = state.food
 
@@ -345,14 +374,26 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
       if (stepping[i] && !wallDeath[i] && !growing[i]) vacating.add(cellKey(bodies[i][0]))
     }
 
+    const shieldActive = effects.map((e) => e.shield !== null && tick <= e.shield.expiresAtTick)
+    const headOn = snakes.map(() => false)
+    const brokeThrough = snakes.map(() => false)
+
     const stepDead = wallDeath.slice()
     for (let i = 0; i < count; i++) {
       if (stepDead[i] || !stepping[i]) continue
       for (let j = i + 1; j < count; j++) {
         if (stepDead[j] || !stepping[j]) continue
         if (nextCell[i]!.x === nextCell[j]!.x && nextCell[i]!.y === nextCell[j]!.y) {
-          stepDead[i] = true
-          stepDead[j] = true
+          headOn[i] = true
+          headOn[j] = true
+          // Exactly one side shielded wins the head-on outright, using its shield up; both or
+          // neither shielded is the usual mutual crash.
+          const survivesI = shieldActive[i] && !shieldActive[j]
+          const survivesJ = shieldActive[j] && !shieldActive[i]
+          if (survivesI) effects[i] = { ...effects[i], shield: null }
+          else stepDead[i] = true
+          if (survivesJ) effects[j] = { ...effects[j], shield: null }
+          else stepDead[j] = true
         }
       }
     }
@@ -362,13 +403,21 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
       if (!dead[i]) for (const cell of bodies[i]) bodyUnion.add(cellKey(cell))
     }
     for (let i = 0; i < count; i++) {
-      if (stepDead[i] || !stepping[i]) continue
+      if (stepDead[i] || !stepping[i] || headOn[i]) continue
       const key = cellKey(nextCell[i]!)
       if (tunnelCellSet.has(key)) continue
-      if (obstacleSet.has(key) || (bodyUnion.has(key) && !vacating.has(key))) stepDead[i] = true
+      if (obstacleSet.has(key) || (bodyUnion.has(key) && !vacating.has(key))) {
+        if (shieldActive[i]) {
+          brokeThrough[i] = true
+          effects[i] = { ...effects[i], shield: null }
+        } else {
+          stepDead[i] = true
+        }
+      }
     }
 
-    if (stepDead.some((d, i) => d && !dead[i])) {
+    const anyDied = stepDead.some((d, i) => d && !dead[i])
+    if (anyDied) {
       // A dying snake's move on THIS sub-step never commits (crashCell alone records where it
       // would have landed — see SnakeEntity.crashCell's own comment: the body array stays exactly
       // as of its last successful sub-step, the original single-step engine's own convention,
@@ -388,6 +437,7 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
         }
         if (dead[i]) continue
         bodies[i] = growing[i] ? [...bodies[i], nextCell[i]!] : [...bodies[i].slice(1), nextCell[i]!]
+        if (growing[i]) foodEaten[i]++
         if (enabledPowerups.length > 0 && pickups.length > 0) {
           const landed = nextCell[i]!
           const found = pickups.find((pu) => pu.cell.x === landed.x && pu.cell.y === landed.y)
@@ -397,37 +447,46 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
           }
         }
       }
-      break substep
-    }
-
-    for (let i = 0; i < count; i++) {
-      if (!stepping[i]) continue
-      bodies[i] = growing[i] ? [...bodies[i], nextCell[i]!] : [...bodies[i].slice(1), nextCell[i]!]
-    }
-
-    if (enabledPowerups.length > 0 && pickups.length > 0) {
+    } else {
       for (let i = 0; i < count; i++) {
         if (!stepping[i]) continue
-        const landed = nextCell[i]!
-        const found = pickups.find((pu) => pu.cell.x === landed.x && pu.cell.y === landed.y)
-        if (found) {
-          heldPowerup[i] = found.type
-          pickups = pickups.filter((pu) => pu.id !== found.id)
+        bodies[i] = growing[i] ? [...bodies[i], nextCell[i]!] : [...bodies[i].slice(1), nextCell[i]!]
+        if (growing[i]) foodEaten[i]++
+      }
+
+      if (enabledPowerups.length > 0 && pickups.length > 0) {
+        for (let i = 0; i < count; i++) {
+          if (!stepping[i]) continue
+          const landed = nextCell[i]!
+          const found = pickups.find((pu) => pu.cell.x === landed.x && pu.cell.y === landed.y)
+          if (found) {
+            heldPowerup[i] = found.type
+            pickups = pickups.filter((pu) => pu.id !== found.id)
+          }
         }
       }
     }
+
+    // Scales break-throughs, after every surviving move has committed: the body that was hit loses
+    // the hit cell and everything behind it. A snake that died this sub-step keeps its body exactly
+    // as it was (the death fade in SnakeBoardCanvas draws that last committed body), so it's never
+    // trimmed.
+    for (let i = 0; i < count; i++) {
+      if (!brokeThrough[i] || dead[i]) continue
+      const owner = locateBrokenBody(bodies, nextCell[i]!, i)
+      if (owner !== -1 && !dead[owner]) bodies[owner] = trimSnakeBodyAtCell(bodies[owner], nextCell[i]!)
+    }
+
+    if (anyDied) break substep
   }
 
   const diedThisTick = dead.map((d, i) => d && aliveBefore[i])
 
-  // A snake's `body` only ever grows (+1, food) or stays flat (slide) within this function —
-  // Constrict is the only thing that can shrink it, and that happens in a separate call before
-  // tickSnake ever runs (see useSnakeState.ts's own per-tick ordering) — so any length increase
-  // here is exactly this tick's own food-eating, whether or not the snake went on to crash later
-  // in the same tick.
+  // Score comes from foodEaten, not from how much a body grew: a Scales break-through can cut a
+  // snake's body in the same tick that snake eats, so the change in length would undercount.
   const nextSnakes: SnakeEntity[] = snakes.map((s, i) => {
     if (!aliveBefore[i]) return s
-    const scoreGain = Math.max(0, bodies[i].length - s.body.length)
+    const scoreGain = foodEaten[i]
     return {
       ...s,
       body: bodies[i],
@@ -436,13 +495,13 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
       pendingDirection: steps[i] > 0 ? null : s.pendingDirection,
       score: s.score + scoreGain,
       heldPowerup: heldPowerup[i],
-      effects: expireEffects(s.effects, tick),
+      effects: expireEffects(effects[i], tick),
       crashCell: diedThisTick[i] ? crashCell[i] : s.crashCell,
       peakLength: Math.max(s.peakLength, bodies[i].length)
     }
   })
 
-  const ateFood = bodies.some((body, i) => body.length > snakes[i].body.length)
+  const ateFood = foodEaten.some((n) => n > 0)
   if (ateFood) {
     const occupied = occupiedFromBodies(bodies, obstacles)
     const exclude = new Set(arenaCellSet)

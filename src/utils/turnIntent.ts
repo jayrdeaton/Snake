@@ -6,11 +6,8 @@ import { Direction } from '@/types'
 // deliberate flick-to-turn.
 export const MIN_SWIPE_DISTANCE = 24
 
-// How far a finger/pointer may drift and still count as a tap-to-activate, rather than the start
-// of a drag — kept alongside MIN_SWIPE_DISTANCE for parity with LightCycles' turnIntent.ts (see
-// that file for the full rationale), though Snake has no tap-to-activate gesture at all (no
-// held-item/activate action — see TouchInputLayer.tsx, whose zones are bare Gesture.Pan), so this
-// constant currently has no consumer here.
+// How far a finger may drift and still count as a tap-to-activate rather than the start of a drag
+// (see TouchInputLayer.tsx's Gesture.Tap). Kept below MIN_SWIPE_DISTANCE so the two never overlap.
 export const TAP_MAX_DISTANCE = 18
 
 export interface ResolveTurnIntentParams {

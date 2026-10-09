@@ -8,7 +8,7 @@ import { runOnJS, SharedValue, useSharedValue } from 'react-native-reanimated'
 
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { Direction, SnakeId } from '@/types'
-import { resolveTurnIntent } from '@/utils/turnIntent'
+import { resolveTurnIntent, TAP_MAX_DISTANCE } from '@/utils/turnIntent'
 
 export type TouchInputMode = 'solo' | 'dual'
 
@@ -89,15 +89,17 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
   // player can chain several turns within one continuous touch without lifting their finger — see
   // LightCycles' TouchInputLayer.tsx's makePlayerGesture for the full rationale. Composed with a
   // Gesture.Tap for powerup activation (a stationary tap, not a drag) via Gesture.Simultaneous, so
-  // both recognizers share the exact same zone rather than needing a separate hit-target — the
-  // `.hitSlop({})` on the pan below is the exact workaround LightCycles' own TouchInputLayer.tsx
-  // needs to make that composition register at all, and it was already here before Tap ever needed
-  // it.
+  // both recognizers share the exact same zone rather than needing a separate hit-target.
   const makeSnakeGesture = useCallback(
     (snakeId: SnakeId, base: SharedValue<{ x: number; y: number }>, lastDirection: SharedValue<Direction | null>) => {
       const pan = Gesture.Pan()
         .maxPointers(1)
         .minDistance(0)
+        // Empty, but required: Gesture.Simultaneous(pan, tap) below silently never recognizes
+        // either gesture (no onStart, no onUpdate, nothing) when neither has an explicit
+        // hitSlop() call. A bare Pan alone (no Tap composed in) works fine without it; it's
+        // specifically the Simultaneous+Tap combination that needs it. Reproduced against RNGH
+        // 2.32.0. Both gestures need it, matching each other.
         .hitSlop({})
         .enabled(enabled)
         .onStart(() => {
@@ -117,9 +119,21 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
           }
         })
 
+      // A dedicated, purpose-built recognizer for "was this a tap": TAP_MAX_DISTANCE, kept below
+      // MIN_SWIPE_DISTANCE, is what RNGH itself uses to decide the gesture failed once a finger
+      // drifts too far, rather than this file re-deriving "no swipe direction was ever recognized"
+      // from the Pan's own state (the previous approach, which occasionally left a genuine but slightly
+      // wobbly tap unrecognized, since human touches are rarely perfectly stationary). Runs
+      // simultaneously with the Pan (see the Gesture.Simultaneous below) on the same zoned view;
+      // `success` is false if the gesture failed (drifted too far, or was cancelled), so only a
+      // real, released tap fires activation.
       const tap = Gesture.Tap()
+        .maxDistance(TAP_MAX_DISTANCE)
+        .hitSlop({})
         .enabled(enabled)
-        .onEnd(() => runOnJS(handleActivate)(snakeId))
+        .onEnd((_event, success) => {
+          if (success) runOnJS(handleActivate)(snakeId)
+        })
 
       return Gesture.Simultaneous(pan, tap)
     },

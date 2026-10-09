@@ -7,17 +7,6 @@ import type { RootState } from '@/redux/store'
 import { AchievementDefinition, SnakeId, StatsState, UnlockedAchievementsState } from '@/types'
 import { applyRoundOutcome, getProfileStatsView, RoundContext, RoundOutcome } from '@/utils/statsEngine'
 
-// Same fields as statsEngine's own RoundContext, but profileIds is seat-keyed here instead of a
-// flat list — applyRoundOutcome only ever needs the flat list to bump each profile's own bucket
-// (see recordRoundOutcome below, which derives it), but recordRoundOutcome itself also needs to
-// know which seat each id belongs to, to hand 2 Player unlocks back split by seat instead of merged
-// into one list (see RecordRoundOutcomeResult below, and game.tsx's own achievementUnlocks state —
-// the reason this association has to survive the round trip now, where it used to just get
-// flattened away before it ever reached here).
-interface RecordRoundOutcomeContext extends Omit<RoundContext, 'profileIds'> {
-  profileIds?: Partial<Record<SnakeId, string>>
-}
-
 // Returned by recordRoundOutcome below — `device` is the device-wide/"All Profiles" newly-unlocked
 // list (no seat owner), `profiles` is a parallel per-seat breakdown of whatever THAT seat's own
 // profile newly unlocked. Solo/Vs CPU merge both into one flat toast list at the call site
@@ -33,7 +22,7 @@ interface GameStatsContextValue {
   unlockedAchievements: UnlockedAchievementsState
   // Returns whatever newly unlocked this round, split device-wide vs per-seat — see
   // RecordRoundOutcomeResult above for why the caller needs both instead of one merged list.
-  recordRoundOutcome: (outcome: RoundOutcome, context: RecordRoundOutcomeContext) => RecordRoundOutcomeResult
+  recordRoundOutcome: (outcome: RoundOutcome, context: RoundContext) => RecordRoundOutcomeResult
   resetAll: () => void
   removeProfileStats: (profileId: string) => void
 }
@@ -45,7 +34,7 @@ function profileViews(stats: StatsState): Record<string, StatsState> {
 }
 
 // The single source of truth for both the achievements screen and the in-round "new high score"
-// banner (see game.tsx's own viewerStats), profile-scoped via `stats.profiles[id]` wherever a
+// banner (see game.tsx's own seatStats), profile-scoped via `stats.profiles[id]` wherever a
 // specific profile is active. The data itself lives in the store's `achievements` slice.
 export function GameStatsProvider({ children }: { children: ReactNode }) {
   const { stats, unlockedAchievements, recordOutcome, resetAll, removeProfile } = useAchievements<StatsState, RootState>({
@@ -56,20 +45,14 @@ export function GameStatsProvider({ children }: { children: ReactNode }) {
   })
 
   const recordRoundOutcome = useCallback(
-    (outcome: RoundOutcome, context: RecordRoundOutcomeContext): RecordRoundOutcomeResult => {
-      const seatProfileIds = context.profileIds
-      // applyRoundOutcome (and the package's own recordOutcome underneath it) only ever needs the
-      // flat list to know WHICH buckets to bump, not which seat each one came from — the seat
-      // association is reconstructed from seatProfileIds below, after the fact, purely to route the
-      // result back to the caller.
-      const flatProfileIds = seatProfileIds ? Object.values(seatProfileIds).filter((id): id is string => id !== undefined) : undefined
-      const result = recordOutcome((prev) => applyRoundOutcome(prev, outcome, { ...context, profileIds: flatProfileIds }))
+    (outcome: RoundOutcome, context: RoundContext): RecordRoundOutcomeResult => {
+      const result = recordOutcome((prev) => applyRoundOutcome(prev, outcome, context))
 
       // The package reports per-profile unlocks keyed by profile id, since it has no notion of
       // seats; callers think in seats, so translate back through the same profileIds map that
       // produced them — same translation LightCycles' own recordRoundOutcome does, now shared via
       // @tastic/achievements' own mapUnlocksBySeat.
-      const profiles = mapUnlocksBySeat([1, 2] as SnakeId[], seatProfileIds, result.profiles)
+      const profiles = mapUnlocksBySeat([1, 2] as SnakeId[], context.profileIds, result.profiles)
 
       return { device: result.device, profiles }
     },

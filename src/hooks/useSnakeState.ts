@@ -39,7 +39,7 @@ const CPU_SNAKE_ID: SnakeId = 2
 // cellPx/safeAreaInsetsPx default to 1/all-zero (no margin) — see createInitialSnakeState's own
 // comment for why: this hook's caller (GameScreen) is what decides whether safeAreaInsetsPx is
 // actually the device's real insets or zeroed out (see that screen's own fullScreen branch).
-export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRoundSettings, cpuDifficulty: CpuDifficulty, colors?: Partial<Record<SnakeId, string>>, cellPx: number = 1, safeAreaInsetsPx: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 }) {
+export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRoundSettings, cpuDifficulty: CpuDifficulty, colors?: Partial<Record<SnakeId, string>>, cellPx: number = 1, safeAreaInsetsPx: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 }, paused: boolean = false) {
   const snakeCount = snakeCountForMode(mode)
 
   const [state, setState] = useState(() => createInitialSnakeState(grid, snakeCount, settings, colors, Math.random, cellPx, safeAreaInsetsPx))
@@ -105,8 +105,10 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRo
   // Same rAF variable-tick-rate loop structure as LightCycles' useGameState.ts: runs only while the
   // (outer) phase is 'playing', torn down the instant it leaves — whether that's forward into
   // 'gameOver' (round ended) or backward into 'onboarding' (retry). lastTickRef is reset fresh every
-  // time the effect (re)starts, exactly like LightCycles' lastTickRef/elapsedRef reset on mount, so
-  // a fresh round never fires its first tick early against a stale timestamp from a previous round.
+  // time the effect (re)starts, exactly like LightCycles' lastTickRef reset on mount, so a fresh
+  // round never fires its first tick early against a stale timestamp from a previous round.
+  // Also halts while `paused` (a dialog or a background pause, see game.tsx); a resume restarts with
+  // lastTickRef null, so the first tick after it waits a full interval.
   const rafRef = useRef<number | null>(null)
   const lastTickRef = useRef<number | null>(null)
 
@@ -114,7 +116,7 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRo
   const hasPowerups = settings.enabledPowerups.length > 0
 
   useEffect(() => {
-    if (phase !== 'playing') return
+    if (phase !== 'playing' || paused) return
 
     let active = true
     lastTickRef.current = null
@@ -154,7 +156,7 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRo
         rafRef.current = null
       }
     }
-  }, [phase, mode, cpuDifficulty, tickIntervalMs, hasPowerups])
+  }, [phase, paused, mode, cpuDifficulty, tickIntervalMs, hasPowerups])
 
   return { state, turn, activate, beginPlaying, retry, tickIntervalMs }
 }
