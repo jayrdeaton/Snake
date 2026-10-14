@@ -69,10 +69,10 @@ export const Providers = ({ children }: Props) => {
                     <Theme>
                       <ToastProvider haptics={Haptics} paper={RNPaper}>
                         {children}
-                        {/* historyButton/clearButton off — matches AirHockey/BoxHockey/Pong/LightCycles;
+                        {/* historyButton/clearButton off - matches AirHockey/BoxHockey/Pong/LightCycles;
                         limit is already the package's own default (3), pinned explicitly so it stays 3
                         regardless of what that default does in a future toaster version. No historyModal
-                        — Snake's own history drawer (@rific/drawer-backed) was unreachable dead code now
+                        - Snake's own history drawer (@rific/drawer-backed) was unreachable dead code now
                         that historyButton is hidden and nothing calls useToast().openHistory(); removed
                         along with the @rific/drawer dependency itself. */}
                         <Toaster historyButton={null} clearButton={null} limit={3} />

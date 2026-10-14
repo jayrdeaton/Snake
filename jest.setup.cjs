@@ -8,7 +8,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 jest.mock('redux-persist/integration/react')
 
 // Theme.tsx imports this bare subpath directly (`@expo/vector-icons/MaterialCommunityIcons`) to
-// preload the icon font — there's no src/__mocks__/ file for it at all (distinct from the
+// preload the icon font - there's no src/__mocks__/ file for it at all (distinct from the
 // '@expo/vector-icons' barrel mocked separately), so without this registration it silently loads
 // the real font-glyph component in every test that renders Theme. Same gap, same fix, as
 // Hangman's own jest.setup.cjs for the identical import.

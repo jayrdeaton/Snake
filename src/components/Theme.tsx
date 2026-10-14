@@ -14,7 +14,7 @@ export type ThemeProps = {
 }
 
 // The app-wide display typeface, fed to auto-paper's own `fontFamily` prop below so every Paper
-// typography variant reskins to it in one place — swapping fonts later only means changing this.
+// typography variant reskins to it in one place - swapping fonts later only means changing this.
 const DISPLAY_FONT_FAMILY = 'Fredoka_600SemiBold'
 
 export const Theme = ({ children }: ThemeProps) => {

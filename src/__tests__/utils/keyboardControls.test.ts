@@ -28,7 +28,7 @@ describe('resolveControlSchemeDirection', () => {
     expect(resolveControlSchemeDirection({ key: 'ArrowUp', code: 'ArrowUp' }, 'wasd')).toBeNull()
   })
 
-  // Numpad is matched by .code (physical key location), not .key (the character produced) — see
+  // Numpad is matched by .code (physical key location), not .key (the character produced) - see
   // keyboardControls.ts's own NUMPAD_KEY_MAP comment for why: .key flips between a digit and an
   // arrow-key name depending on NumLock state, while .code stays 'NumpadN' regardless.
   describe('numpad', () => {
@@ -67,7 +67,7 @@ describe('resolveControlSchemeActivate', () => {
   })
 
   // Numpad's activate key is matched by .code, not .key, for the identical NumLock-independence
-  // reason resolveControlSchemeDirection's own numpad handling is — see keyboardControls.ts.
+  // reason resolveControlSchemeDirection's own numpad handling is - see keyboardControls.ts.
   describe('numpad', () => {
     it('resolves NumpadEnter regardless of what .key reports', () => {
       expect(resolveControlSchemeActivate({ key: 'Enter', code: 'NumpadEnter' }, 'numpad')).toBe(true)

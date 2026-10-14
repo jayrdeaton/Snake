@@ -16,18 +16,18 @@ export interface TouchInputLayerProps {
   mode: TouchInputMode
   enabled: boolean
   onTurn: (snakeId: SnakeId, direction: Direction) => void
-  // Fires on a stationary tap (composed alongside the pan below, not a separate zone — see
+  // Fires on a stationary tap (composed alongside the pan below, not a separate zone - see
   // makeSnakeGesture's own comment). Always safe to wire regardless of whether powerups are even
   // enabled this round: activate() itself no-ops when the snake holds nothing (see
   // snakeEngine.ts's applySnakePowerupActivation).
   onActivate: (snakeId: SnakeId) => void
   // Whether each seat's own controls are currently Mesmerized (see types/index.ts's
-  // SnakeControlEffect) — a mesmerized seat's resolved swipe direction is inverted before onTurn
+  // SnakeControlEffect) - a mesmerized seat's resolved swipe direction is inverted before onTurn
   // ever sees it, mirroring LightCycles' identical TouchInputLayer prop. Read through latestRef
   // (see below), never a gesture dependency, so a mid-touch mesmerize landing or expiring can
   // never force RNGH to tear down and re-attach an in-progress gesture's native recognizer.
   controlInverted: Record<SnakeId, boolean>
-  // Each snake's current (committed) heading, straight from game state — used to gate the turn
+  // Each snake's current (committed) heading, straight from game state - used to gate the turn
   // sound/haptic on isEffectiveTurn, so continuing straight or reversing 180° (both of which
   // applySnakeTurnIntent silently no-ops in snakeEngine.ts) doesn't fire feedback for a turn that
   // never actually happens. Mirrors LightCycles' identical TouchInputLayer prop exactly.
@@ -35,12 +35,12 @@ export interface TouchInputLayerProps {
 }
 
 // Two independent single-finger Pan gestures in dual mode, each on its OWN View (sized/positioned
-// to its own half — see snake1ZoneStyle/snake2ZoneStyle below) rather than one shared View split via
+// to its own half - see snake1ZoneStyle/snake2ZoneStyle below) rather than one shared View split via
 // `hitSlop`. Direct port of LightCycles' TouchInputLayer.tsx's own reasoning: two touches landing in
 // the same native touch-event batch (a genuine simultaneous two-player swipe) can race on which
 // single shared recognizer claims which pointer and lose one or both turns; two separate native
 // views/recognizers have nothing left to race, since each only ever sees the pointer that landed on
-// it. The board underneath still stays one undivided render — only touch handling is zoned.
+// it. The board underneath still stays one undivided render - only touch handling is zoned.
 export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, controlInverted, currentDirections }: TouchInputLayerProps) {
   const solo = mode === 'solo'
   const { orientationMode, p1OnRight } = useOrientationState()
@@ -49,7 +49,7 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
   const { selection } = useVibration()
 
   // Everything handleTurn/handleActivate need, kept in a ref rather than closed over directly, so
-  // those two callbacks — and therefore makeSnakeGesture and the Gesture objects it builds below —
+  // those two callbacks - and therefore makeSnakeGesture and the Gesture objects it builds below -
   // can stay referentially stable across renders, exactly mirroring LightCycles' identical
   // TouchInputLayer.tsx latestRef: RNGH tears down and re-attaches its native recognizer on every
   // new gesture object handed to GestureDetector, and a touch that starts mid-rebuild loses its
@@ -86,7 +86,7 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
   const snake2LastDirection = useSharedValue<Direction | null>(null)
 
   // Resolves a turn continuously during the drag (onUpdate) instead of once at release, so a
-  // player can chain several turns within one continuous touch without lifting their finger — see
+  // player can chain several turns within one continuous touch without lifting their finger - see
   // LightCycles' TouchInputLayer.tsx's makePlayerGesture for the full rationale. Composed with a
   // Gesture.Tap for powerup activation (a stationary tap, not a drag) via Gesture.Simultaneous, so
   // both recognizers share the exact same zone rather than needing a separate hit-target.
@@ -149,7 +149,7 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
       <GestureDetector gesture={soloGesture!}>
         {/* collapsable={false}: without a prop that makes it stand out, RN's view-flattening
         optimization merges this plain View into its parent, and GestureDetector's ref then attaches
-        to nothing — the gesture silently never receives a single touch. */}
+        to nothing - the gesture silently never receives a single touch. */}
         <View collapsable={false} style={StyleSheet.absoluteFill} />
       </GestureDetector>
     )

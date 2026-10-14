@@ -5,7 +5,7 @@ import { applyCpuSnakePowerupActivation, applyCpuSnakeTurn, chooseCpuSnakeDirect
 import { buildSnakeOccupiedSet } from '@/utils/snakeEngine'
 
 // Fills in the fields every fixture needs regardless of what it's actually testing, so each call
-// site only has to spell out what's relevant to it — same pattern as snakeEngine.test.ts.
+// site only has to spell out what's relevant to it - same pattern as snakeEngine.test.ts.
 function snake(overrides: Partial<SnakeEntity> & Pick<SnakeEntity, 'id' | 'body' | 'direction'>): SnakeEntity {
   return { pendingDirection: null, alive: true, score: 0, color: '#000', crashCell: null, heldPowerup: null, effects: { speed: null, control: null, shield: null }, peakLength: overrides.body.length, ...overrides }
 }
@@ -40,7 +40,7 @@ describe('chooseCpuSnakeDirection', () => {
     const randomValues = [0, 0.1, 0.25, 0.49, 0.5, 0.51, 0.75, 0.9, 0.99]
 
     for (const direction of ['up', 'down', 'left', 'right'] as Direction[]) {
-      // Head dead-center of a wide-open grid so every candidate direction is otherwise safe —
+      // Head dead-center of a wide-open grid so every candidate direction is otherwise safe -
       // isolates the reversal guard itself rather than any wall/body pressure forcing the choice.
       const testSnake = snake({
         id: 1,
@@ -68,7 +68,7 @@ describe('chooseCpuSnakeDirection', () => {
   })
 })
 
-describe('chooseCpuSnakeDirection — single safe option', () => {
+describe('chooseCpuSnakeDirection - single safe option', () => {
   // Head at (0,5) facing 'up': candidates are 'up' / 'left' / 'right' ('down' is excluded outright
   // as the reversal). 'left' steps off the left edge (wall death); 'up' steps onto an occupied
   // cell (body collision, simulating either the snake's own body or a rival's); only 'right' is
@@ -91,7 +91,7 @@ describe('chooseCpuSnakeDirection — single safe option', () => {
   })
 })
 
-describe('chooseCpuSnakeDirection — determinism', () => {
+describe('chooseCpuSnakeDirection - determinism', () => {
   it('returns the same result on repeated calls with the same fixed random and inputs', () => {
     const testSnake = snake({
       id: 1,
@@ -106,7 +106,7 @@ describe('chooseCpuSnakeDirection — determinism', () => {
       grid: OPEN_GRID,
       occupied: new Set(['4,4', '5,4']),
       difficulty: 'normal' as CpuDifficulty,
-      random: fixedRandom(0.01), // below CPU_NORMAL_SUBOPTIMAL_CHANCE — exercises the runner-up branch too
+      random: fixedRandom(0.01), // below CPU_NORMAL_SUBOPTIMAL_CHANCE - exercises the runner-up branch too
       food: { x: 6, y: 4 }
     }
 
@@ -132,17 +132,17 @@ describe('chooseCpuSnakeDirection — determinism', () => {
   })
 })
 
-describe('chooseCpuSnakeDirection — boosted lookahead (ownSteps)', () => {
+describe('chooseCpuSnakeDirection - boosted lookahead (ownSteps)', () => {
   // Head at (5,5) facing 'right', an obstacle sitting 2 cells ahead at (7,5). One step ('right' to
   // (6,5)) is safe in isolation; a 2x-boosted snake continuing 'right' would crash on its own
-  // second step into that obstacle — ownSteps must catch this, not just the immediate next cell.
+  // second step into that obstacle - ownSteps must catch this, not just the immediate next cell.
   //
   // On a wide-open grid minus one distant cell, every candidate direction still scores essentially
   // the same open-space count (removing 1 of 400 cells barely changes reachability from anywhere),
-  // so the space-based score alone can't distinguish them — the real assertion here is about
+  // so the space-based score alone can't distinguish them - the real assertion here is about
   // ownSteps, not about tie-breaking. Food is placed exactly on 'right's own 1-step landing cell
   // (distanceToNearestTarget returns 0 for a start cell that's already a target), which up/down
-  // can only reach in 2 real BFS steps each — this resolves the tie in 'right's favor
+  // can only reach in 2 real BFS steps each - this resolves the tie in 'right's favor
   // unambiguously for ownSteps=1, without the (7,5) obstacle (irrelevant to this short a path)
   // ever entering into it.
   const foodAtRightLanding: GridCell = { x: 6, y: 5 }
@@ -166,7 +166,7 @@ describe('chooseCpuSnakeDirection — boosted lookahead (ownSteps)', () => {
   })
 })
 
-describe('chooseCpuSnakeDirection — pickup-seeking', () => {
+describe('chooseCpuSnakeDirection - pickup-seeking', () => {
   const pickups: SnakePowerupPickup[] = [{ id: 'pu-1', type: 'scales', cell: { x: 10, y: 10 } }]
 
   it('breaks a near-tie toward a live pickup on normal/hard when nothing is already held', () => {
@@ -193,7 +193,7 @@ describe('chooseCpuSnakeDirection — pickup-seeking', () => {
         { x: 10, y: 11 }
       ]
     })
-    // 'easy' still has a 50% chance to ignore scoring altogether — force the scored branch via a
+    // 'easy' still has a 50% chance to ignore scoring altogether - force the scored branch via a
     // random draw above CPU_EASY_RANDOM_CHANCE so this test actually exercises tie-breaking, not
     // the random-safe-move branch.
     const result = chooseCpuSnakeDirection({ snake: testSnake, grid: OPEN_GRID, occupied: new Set(), difficulty: 'easy', random: fixedRandom(0.99), food: FAR_FOOD, pickups })
@@ -274,9 +274,9 @@ describe('shouldCpuActivateSnakePowerup', () => {
 
   it('uses an offensive item when the opponent is nearly boxed in, never on easy', () => {
     // Human heads 'right' into a short, 3-cell dead-end corridor (walled top/bottom, capped at the
-    // far end) — its own next-step space is small (3) but not already-fatal, which is exactly the
+    // far end) - its own next-step space is small (3) but not already-fatal, which is exactly the
     // "nearly boxed in, not yet dead" case the offensive threshold targets (a space of -1, already
-    // doomed regardless, falls through to the random fallback chance instead — see
+    // doomed regardless, falls through to the random fallback chance instead - see
     // shouldCpuActivateSnakePowerup's own offensive branch).
     const boxedHuman = snake({
       id: 1,
@@ -326,7 +326,7 @@ describe('applyCpuSnakePowerupActivation', () => {
   })
 })
 
-describe('applyCpuSnakeTurn — mesmerize compensation', () => {
+describe('applyCpuSnakeTurn - mesmerize compensation', () => {
   const mesmerizedCpu = snake({
     id: 2,
     direction: 'right',
@@ -337,14 +337,14 @@ describe('applyCpuSnakeTurn — mesmerize compensation', () => {
     effects: { speed: null, control: { type: 'mesmerize', expiresAtTick: 100 }, shield: null }
   })
 
-  it('hard always compensates — the queued direction matches the unmesmerized best choice exactly', () => {
+  it('hard always compensates - the queued direction matches the unmesmerized best choice exactly', () => {
     const state = makeState({ snakes: [mesmerizedCpu] })
     const unmesmerizedChoice = chooseCpuSnakeDirection({ snake: { ...mesmerizedCpu, effects: { speed: null, control: null, shield: null } }, grid: OPEN_GRID, occupied: new Set(), difficulty: 'hard', food: FAR_FOOD })
     const next = applyCpuSnakeTurn(state, 2, 'hard', fixedRandom(0.99))
     expect(next.snakes[0].pendingDirection ?? next.snakes[0].direction).toBe(unmesmerizedChoice)
   })
 
-  it('easy never compensates — the queued direction is the inverted (not the raw best) choice', () => {
+  it('easy never compensates - the queued direction is the inverted (not the raw best) choice', () => {
     const state = makeState({ snakes: [mesmerizedCpu] })
     const unmesmerizedChoice = chooseCpuSnakeDirection({ snake: { ...mesmerizedCpu, effects: { speed: null, control: null, shield: null } }, grid: OPEN_GRID, occupied: new Set(), difficulty: 'easy', random: fixedRandom(0), food: FAR_FOOD })
     const next = applyCpuSnakeTurn(state, 2, 'easy', fixedRandom(0))

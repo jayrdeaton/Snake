@@ -9,7 +9,7 @@ import settingsReducer from '../../redux/settingsSlice'
 
 // index.tsx is the real home screen (animated hero title, 1 Player/2 Player buttons, settings
 // gear). HeroTitle's own letter/loop animation is Skia/Reanimated-heavy and has no testable
-// behavior relevant to index.tsx's own logic, so it's mocked to a trivial stand-in here — same
+// behavior relevant to index.tsx's own logic, so it's mocked to a trivial stand-in here - same
 // narrow, test-file-local override convention as +not-found.test.tsx's own expo-router mock.
 jest.mock('@/components/HeroTitle', () => ({ HeroTitle: () => null }))
 
@@ -49,7 +49,7 @@ describe('app/index', () => {
     const { getByText, queryByText } = await renderIndex()
     expect(getByText('1 Player')).toBeTruthy()
     expect(getByText('2 Player')).toBeTruthy()
-    // No per-mode high-score stats on this screen — those live on the achievements screen instead.
+    // No per-mode high-score stats on this screen - those live on the achievements screen instead.
     expect(queryByText('12')).toBeNull()
     expect(queryByText('Vs CPU')).toBeNull()
   })

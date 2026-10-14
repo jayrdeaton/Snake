@@ -20,7 +20,7 @@ function play(prev: StatsState, outcome: RoundOutcome, context: RoundContext = C
   return applyRoundOutcome(prev, outcome, context, now)
 }
 
-describe('applyRoundOutcome — per mode', () => {
+describe('applyRoundOutcome - per mode', () => {
   it('counts the round and tracks best/total score for that mode only', () => {
     const s = play(DEFAULT_STATS, round({ mode: 'solo', seats: seat1(30) }))
     expect(s.byMode.solo).toEqual({ played: 1, bestScore: 30, totalScore: 30 })
@@ -41,7 +41,7 @@ describe('applyRoundOutcome — per mode', () => {
   })
 })
 
-describe('applyRoundOutcome — versus record', () => {
+describe('applyRoundOutcome - versus record', () => {
   it('leaves the versus record untouched for solo rounds', () => {
     const s = play(DEFAULT_STATS, round({ mode: 'solo' }))
     expect(s.versus).toEqual({ played: 0, wins: 0, losses: 0, draws: 0 })
@@ -70,7 +70,7 @@ describe('applyRoundOutcome — versus record', () => {
   })
 })
 
-describe('applyRoundOutcome — cpu difficulty', () => {
+describe('applyRoundOutcome - cpu difficulty', () => {
   it('buckets vsCpu results by the difficulty played', () => {
     let s = play(DEFAULT_STATS, round({ mode: 'vsCpu', winner: 1 }), { cpuDifficulty: 'hard' })
     s = play(s, round({ mode: 'vsCpu', winner: 2 }), { cpuDifficulty: 'easy' })

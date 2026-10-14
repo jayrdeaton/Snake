@@ -24,7 +24,7 @@ jest.mock('@rific/auto-paper', () => ({
     return props.children
   },
   themeActions: { initialize: (payload: unknown) => ({ payload, type: 'theme/initialize' }) },
-  // Real useThemeBridgeProps just repackages its own argument into the same shape it's given —
+  // Real useThemeBridgeProps just repackages its own argument into the same shape it's given -
   // matching that here keeps this suite asserting on Provider's actual received props (initialValue/
   // onChange/onReady) without needing to know the bridge hook's own internals.
   useThemeBridgeProps: (p: any) => p

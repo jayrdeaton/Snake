@@ -4,7 +4,7 @@ import { GridCell, SnakeEntity, SnakeGameState, SnakeRoundSettings } from '@/typ
 import { applySnakePowerupActivation, applySnakeTurnIntent, buildSnakeOccupiedSet, createInitialSnakeState, SNAKE_START_LENGTH, tickSnake } from '@/utils/snakeEngine'
 
 // Fills in the fields every fixture needs regardless of what it's actually testing, so each call
-// site only has to spell out what's relevant to it — same pattern as LightCycles' gameEngine.test.ts.
+// site only has to spell out what's relevant to it - same pattern as LightCycles' gameEngine.test.ts.
 function snake(overrides: Partial<SnakeEntity> & Pick<SnakeEntity, 'id' | 'body' | 'direction'>): SnakeEntity {
   return { pendingDirection: null, alive: true, score: 0, color: '#000', crashCell: null, heldPowerup: null, effects: { speed: null, control: null, shield: null }, peakLength: overrides.body.length, ...overrides }
 }
@@ -103,7 +103,7 @@ describe('createInitialSnakeState', () => {
       expect(s1.direction).toBe('up')
       expect(s2.direction).toBe('down')
       // "Facing each other" on a shared vertical axis IS exactly an opposite-direction pair by
-      // construction — this is the fact that makes them approach one another tick over tick.
+      // construction - this is the fact that makes them approach one another tick over tick.
       expect(isOppositeDirection(s1.direction, s2.direction)).toBe(true)
     })
 
@@ -133,7 +133,7 @@ describe('createInitialSnakeState', () => {
 
     it('marks the ceil(inset/cellPx) cells along each edge unsafe, and none of the interior', () => {
       // A 10x10 grid at cellPx=10: a 25px top inset and 15px left inset round up to 3 and 2 cells
-      // respectively (ceil(25/10)=3, ceil(15/10)=2) — anything less than a full cell of overlap
+      // respectively (ceil(25/10)=3, ceil(15/10)=2) - anything less than a full cell of overlap
       // still counts as unsafe, since food/a pickup only partially clear of the notch/Dynamic
       // Island/speaker cutout is still partially hidden by it. Mirrors LightCycles' identical test.
       const state = createInitialSnakeState({ cols: 10, rows: 10 }, 1, roundSettings(), undefined, Math.random, 10, { top: 25, right: 0, bottom: 0, left: 15 })
@@ -149,7 +149,7 @@ describe('createInitialSnakeState', () => {
 
     it('never places the very first food on a cell inside unsafeCells, even when it would otherwise be the only clear candidate', () => {
       // A 3x3 grid at cellPx=10 with a 20px right inset and 20px bottom inset marks 2 cells unsafe
-      // along each of those edges (ceil(20/10)=2) — the only cell left outside that margin is
+      // along each of those edges (ceil(20/10)=2) - the only cell left outside that margin is
       // (0,0), so without the exclusion food would have nowhere else to spawn.
       const state = createInitialSnakeState({ cols: 3, rows: 3 }, 1, roundSettings(), undefined, Math.random, 10, { top: 0, right: 20, bottom: 20, left: 0 })
       const unsafe = new Set(state.unsafeCells.map((c) => `${c.x},${c.y}`))
@@ -223,12 +223,12 @@ describe('tickSnake', () => {
     ])
     expect(next.snakes[0].score).toBe(1)
     expect(next.snakes[0].peakLength).toBe(4)
-    // The just-eaten cell is now occupied — the respawned food must land somewhere else.
+    // The just-eaten cell is now occupied - the respawned food must land somewhere else.
     expect(next.food).not.toEqual({ x: 5, y: 5 })
   })
 
   it('never respawns food on a snake body, across a range of random draws', () => {
-    // A 4x4 board where a single snake's 12-cell body covers every cell except the bottom row —
+    // A 4x4 board where a single snake's 12-cell body covers every cell except the bottom row -
     // after this tick's growth eats (3,3) it covers every cell except (0,3)/(1,3)/(2,3). Any of
     // the random draws below picking an occupied cell would mean the exclusion logic is broken.
     const body: GridCell[] = [
@@ -375,7 +375,7 @@ describe('tickSnake', () => {
 
   describe('safe-area margin (unsafeCells)', () => {
     // Every cell on the grid is marked unsafe, so pickRandomEmptyCell can never find a candidate at
-    // all — this isolates the exclusion itself (rather than depending on candidate-ordering/random
+    // all - this isolates the exclusion itself (rather than depending on candidate-ordering/random
     // value) since the only possible outcomes are "found nothing" if the exclusion works, or "landed
     // somewhere" if it doesn't.
     const grid = { cols: 10, rows: 10 }
@@ -404,7 +404,7 @@ describe('tickSnake', () => {
       })
       const next = tickSnake(state)
       expect(next.snakes[0].alive).toBe(true)
-      // Head steps onto the portal cell (5,5) and is immediately redirected to (8,8) — the
+      // Head steps onto the portal cell (5,5) and is immediately redirected to (8,8) - the
       // portal's own cell never appears in the body.
       expect(next.snakes[0].body.at(-1)).toEqual({ x: 8, y: 8 })
       expect(next.snakes[0].body.some((c) => c.x === 5 && c.y === 5)).toBe(false)
@@ -481,7 +481,7 @@ describe('tickSnake', () => {
     it('still applies head-to-head inside a tunnel when both land on the exact same cell', () => {
       const state = makeState({
         snakes: [
-          // Both converge on (5,5) this tick — a genuine same-cell head-to-head, not the swap
+          // Both converge on (5,5) this tick - a genuine same-cell head-to-head, not the swap
           // the previous test exercises.
           snake({
             id: 1,
@@ -540,7 +540,7 @@ describe('tickSnake', () => {
       ])
     })
 
-    it('checks collision on the SECOND sub-step independently — dies if it only becomes fatal after the first step', () => {
+    it('checks collision on the SECOND sub-step independently - dies if it only becomes fatal after the first step', () => {
       const state = makeState({
         snakes: [
           snake({
@@ -718,7 +718,7 @@ describe('tickSnake', () => {
       expect(next.outcome).toEqual({ type: 'draw' })
     })
 
-    it('does not tick further once the round is over — the survivor does not keep playing solo', () => {
+    it('does not tick further once the round is over - the survivor does not keep playing solo', () => {
       const state = twoSnakeState()
       const afterDeath = tickSnake(state)
       expect(afterDeath.phase).toBe('roundOver')
@@ -727,7 +727,7 @@ describe('tickSnake', () => {
     })
 
     describe('shared food race', () => {
-      it('resolves a clean race normally — whichever snake reaches the food eats it, food respawns off both bodies', () => {
+      it('resolves a clean race normally - whichever snake reaches the food eats it, food respawns off both bodies', () => {
         const state = twoSnakeState({
           snakes: [
             snake({
@@ -797,7 +797,7 @@ describe('tickSnake', () => {
               direction: 'down'
             })
           ],
-          // Snake 2's tail sits at (5,5) — exactly where snake 1's next head cell (5,5) lands.
+          // Snake 2's tail sits at (5,5) - exactly where snake 1's next head cell (5,5) lands.
           food: otherGrowing ? { x: 5, y: 8 } : { x: 0, y: 0 }
         })
       }
@@ -1060,7 +1060,7 @@ describe('applySnakePowerupActivation', () => {
   })
 
   it('a Constrict shrink is still reflected in peakLength history correctly across a later tick', () => {
-    // Snake grows to length 4, gets constricted back to a shorter body, then ticks again —
+    // Snake grows to length 4, gets constricted back to a shorter body, then ticks again -
     // peakLength must still read 4, the true high-water mark, not whatever the body currently is.
     let state = twoSnakes({
       p1: {

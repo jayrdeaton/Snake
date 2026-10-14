@@ -35,19 +35,19 @@ import { safeBack } from '@/utils/navigation'
 import type { SeatRoundOutcome } from '@/utils/statsEngine'
 import { DEFAULT_PROFILE_STATS } from '@/utils/statsValidation'
 
-// A stable, referentially-constant all-zero insets object — see safeAreaInsetsPx's own comment
+// A stable, referentially-constant all-zero insets object - see safeAreaInsetsPx's own comment
 // below for why this is passed instead of the device's real insets whenever the board isn't
 // actually bleeding under them.
 const ZERO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 }
 
 export default function GameScreen() {
   const params = useLocalSearchParams<{ mode?: string | string[]; p1Color?: string | string[]; p2Color?: string | string[] }>()
-  // Safe fallback to solo — a direct deep-link, a stale/incoming param shape, or a missing param
+  // Safe fallback to solo - a direct deep-link, a stale/incoming param shape, or a missing param
   // never crashes into an unknown mode, it just plays the simplest one.
   const rawMode = Array.isArray(params.mode) ? params.mode[0] : params.mode
   const mode: SnakeMode = rawMode === 'vsCpu' || rawMode === 'twoPlayer' ? rawMode : 'solo'
 
-  // Only ever present coming from /loadout (Vs CPU/2 Player) — Solo skips that screen entirely and
+  // Only ever present coming from /loadout (Vs CPU/2 Player) - Solo skips that screen entirely and
   // falls through to createInitialSnakeState's own SNAKE_COLORS defaults (see useSnakeState.ts).
   const rawP1Color = Array.isArray(params.p1Color) ? params.p1Color[0] : params.p1Color
   const rawP2Color = Array.isArray(params.p2Color) ? params.p2Color[0] : params.p2Color
@@ -65,19 +65,19 @@ export default function GameScreen() {
   const fullScreen = activeRoundSettings.fullScreen
   // Resolved once here (not inside the computeGridSize useMemo below) since designWidth/
   // designHeight and the cellPx prop passed to SnakeBoard both need the same resolved pixel size
-  // too — see constants/snake.ts's own SNAKE_CELL_PX comment for what each tier actually means.
+  // too - see constants/snake.ts's own SNAKE_CELL_PX comment for what each tier actually means.
   const gridSizeTier = activeRoundSettings.gridSizeTier
   const cellPx = SNAKE_CELL_PX[gridSizeTier]
   const insets = useSafeAreaInsets()
   const { gutterWidth } = computeContentBounds(width, MAX_BOARD_CONTENT_WIDTH)
-  // The AVAILABLE width/height computeGridSize sizes the grid from — not just a visual crop applied
+  // The AVAILABLE width/height computeGridSize sizes the grid from - not just a visual crop applied
   // after the fact, so a wide desktop-web window genuinely gets a narrower board (fewer columns) and
   // a device's notch/status bar/home indicator genuinely gets a shorter one (fewer rows), instead of
   // a merely letterboxed view of a bigger one. Mirrors LightCycles' own Full Screen/extendIntoSafeArea
   // setting, which also governs the actual grid a round plays on, not just its on-screen presentation:
   // width loses both the desktop-web gutter and the left/right safe-area insets, height loses the
   // top/bottom safe-area insets. Both ignored entirely once fullScreen is on, same as LightCycles'
-  // extendIntoSafeArea bypassing its own gutter+insets. Live (not frozen) — see boardScale's own
+  // extendIntoSafeArea bypassing its own gutter+insets. Live (not frozen) - see boardScale's own
   // comment below for how a live availableWidth/availableHeight and a frozen state.grid stay
   // reconciled across a resize instead of fighting each other.
   const availableWidth = fullScreen ? width : width - insets.left - insets.right - 2 * gutterWidth
@@ -105,12 +105,12 @@ export default function GameScreen() {
   // changes.
   const roundSettings: SnakeRoundSettings = useMemo(() => ({ wrapEdges, speedTier, arenaVariant, enabledPowerups }), [wrapEdges, speedTier, arenaVariant, enabledPowerups])
 
-  // All-zero unless the board is actually bleeding under the real insets (fullScreen) — see
+  // All-zero unless the board is actually bleeding under the real insets (fullScreen) - see
   // useSnakeState's own safeAreaInsetsPx comment for why: the non-fullScreen boardArea style below
   // already stops short of the inset on its own, so there's nothing left for food/a pickup to avoid.
   const safeAreaInsetsPx = fullScreen ? insets : ZERO_INSETS
 
-  // useSnakeState's own outer phase (onboarding -> playing -> gameOver — see that hook's own
+  // useSnakeState's own outer phase (onboarding -> playing -> gameOver - see that hook's own
   // extensive comment on why this is a different, hook-layer phase from the pure engine's inner
   // state.phase) isn't part of what the hook returns; only state/turn/beginPlaying/retry/
   // tickIntervalMs are. Mirrored here instead: `localPhase` tracks exactly the same
@@ -158,10 +158,10 @@ export default function GameScreen() {
     setLocalPhase('onboarding')
   }, [retry])
 
-  // Each seat's current (committed) heading, straight from game state — passed down to both
+  // Each seat's current (committed) heading, straight from game state - passed down to both
   // TouchInputLayer and KeyboardInputLayer so each can gate its own turn sound/haptic on
   // isEffectiveTurn, mirroring LightCycles' identical currentDirections memo (and identical prop on
-  // its own TouchInputLayer/TouchInputLayer.web) in its own game.tsx exactly — the feedback itself
+  // its own TouchInputLayer/TouchInputLayer.web) in its own game.tsx exactly - the feedback itself
   // lives in the input layers there too, not here. 'up' is an arbitrary placeholder for a seat that
   // doesn't exist yet (solo's snake 2); neither input layer ever actually looks it up for a seat no
   // zone/key scheme is wired to.
@@ -211,12 +211,12 @@ export default function GameScreen() {
     [mode, activate, state.snakes, playActivate, selection]
   )
 
-  // Fires once per snake the instant its heldPowerup transitions from empty to held — a board-wide
+  // Fires once per snake the instant its heldPowerup transitions from empty to held - a board-wide
   // pickup-collection event, unlike activation, so this fires for a CPU's own collection too, not
   // just a human's. Tracked via a ref (not state) purely to detect the null->non-null edge across
   // ticks; a fresh round's snakes all start back at heldPowerup: null, so this self-heals on retry
   // without needing an explicit reset (a stale 'held' snapshot from the previous round can never
-  // itself read as a fresh pickup — only a transition INTO holding something does).
+  // itself read as a fresh pickup - only a transition INTO holding something does).
   const prevHeldPowerupRef = useRef<Partial<Record<SnakeId, SnakePowerupType | null>>>({})
   useEffect(() => {
     for (const snake of state.snakes) {
@@ -226,7 +226,7 @@ export default function GameScreen() {
   }, [state.snakes, playPickup])
 
   // Whether each seat's own controls are currently Mesmerized (see types/index.ts's
-  // SnakeControlEffect) — both input layers invert a mesmerized seat's resolved direction before
+  // SnakeControlEffect) - both input layers invert a mesmerized seat's resolved direction before
   // calling onTurn. `false` for a seat that doesn't exist yet (e.g. seat 2 in Solo) rather than
   // throwing on a missing lookup.
   const controlInverted: Record<SnakeId, boolean> = useMemo(
@@ -331,7 +331,7 @@ export default function GameScreen() {
 
     // Solo/Vs CPU: only ever one human perspective to address (Solo has no seat 2 at all; Vs CPU's
     // seat 2 is the CPU and never earns a profile unlock of its own), so the existing screen-fixed
-    // toast is already always right-side-up for whoever's looking — no reason to route these into
+    // toast is already always right-side-up for whoever's looking - no reason to route these into
     // the dialog too.
     if (mode !== 'twoPlayer') {
       const merged = [...unlocked.device, ...(unlocked.profiles[1] ?? [])]
@@ -342,7 +342,7 @@ export default function GameScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- state.snakes is read once per gameOver entry, matching the roundOver effect below; adding it would re-run this on every tick.
   }, [phase, mode, stats, humanPlayers, winner, cpuDifficulty, lastSelected, recordRoundOutcome, showAchievementToast])
 
-  // Crash sound + haptic — fires once, the instant the engine's own state.phase (not the derived,
+  // Crash sound + haptic - fires once, the instant the engine's own state.phase (not the derived,
   // onboarding-aware `phase` above) flips into 'roundOver', mirroring LightCycles' own immediate
   // crash sound+haptic (game.tsx there fires on the identical transition, independent of any dialog
   // delay). useSnakeSounds/useVibration each already gate themselves on the user's own sound/haptics
@@ -362,7 +362,7 @@ export default function GameScreen() {
   }, [state.phase, playGameOver, notification])
 
   // Gates GameOverDialog's own visibility behind the death-fade ceremony (see SnakeBoardCanvas.tsx's
-  // own per-snake deathProgress animation) rather than showing it the instant phase flips —
+  // own per-snake deathProgress animation) rather than showing it the instant phase flips -
   // mirrors LightCycles' identical showResultDialog effect. Reads state.snakes once per
   // 'roundOver' entry rather than as a dependency: a dead snake's body/alive never changes again
   // for the rest of the round, so there's nothing to go stale. Math.max across every dead snake
@@ -373,10 +373,10 @@ export default function GameScreen() {
   // Same condition GameActionChips' own showBack/showSettings use below.
   const controlsVisible = phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)
 
-  // Mirrors phase === 'playing' into Redux (liveplaySlice — see its own doc) rather than calling
+  // Mirrors phase === 'playing' into Redux (liveplaySlice - see its own doc) rather than calling
   // @tastic/edge-guard's useEdgeGestureGuard directly here: that hook stays mounted once at the app
   // root (Providers.tsx's EdgeGuardBridge), same as every other cross-cutting settings bridge in
-  // this app (FeedbackBridge, ScrollViewBridge) — this just reports the one signal that bridge has
+  // this app (FeedbackBridge, ScrollViewBridge) - this just reports the one signal that bridge has
   // no other way to read. Reset to false on unmount too, so leaving this screen mid-round by any
   // path (not just the in-app back button) can't leave Edge Guard stuck on.
   useEffect(() => {
@@ -386,7 +386,7 @@ export default function GameScreen() {
     }
   }, [phase, paused, dispatch])
 
-  // No toast may stay on screen during live play — only between rounds or at game over. Unlock
+  // No toast may stay on screen during live play - only between rounds or at game over. Unlock
   // toasts fire at game over and last 7s, so a quick Retry would otherwise carry them past the
   // countdown into the next round.
   useEffect(() => {
@@ -437,24 +437,24 @@ export default function GameScreen() {
     }
   }
 
-  // state.grid is already the round's own frozen design resolution — createInitialSnakeState only
+  // state.grid is already the round's own frozen design resolution - createInitialSnakeState only
   // ever runs again on retry (see useSnakeState.ts), so every snake body/food coordinate laid down
   // this round is already committed to state.grid's own cols/rows and can't safely be rederived from
   // a live resize without invalidating them, exactly like LightCycles' analogous grid. Unlike
   // LightCycles, though, nothing here used to freeze the PRESENTATION to match: SnakeBoardCanvas's
   // <Canvas> is a bare StyleSheet.absoluteFill, so it (and TouchInputLayer, also absoluteFill)
   // stretched to whatever styles.root's live size happened to be on every render, while the actual
-  // drawn cells stayed pinned to state.grid's own frozen pixel footprint — on a resize after a round
+  // drawn cells stayed pinned to state.grid's own frozen pixel footprint - on a resize after a round
   // already started, the board would silently stop filling (or overflow) its own canvas instead of
   // visibly growing/shrinking with the window. designWidth/designHeight below are that frozen
-  // footprint made explicit; boardScale — the same live-size-over-design-size transform LightCycles'
+  // footprint made explicit; boardScale - the same live-size-over-design-size transform LightCycles'
   // GameRound uses, and safe for the identical reason: TouchInputLayer's own zones are
-  // percentage-of-parent/pan-translation based, not absolute-pixel — scales the board+touch subtree
+  // percentage-of-parent/pan-translation based, not absolute-pixel - scales the board+touch subtree
   // below as one rigid unit to fit the live window, so it now visibly tracks a resize without state
   // (or state.grid's own cols/rows) ever needing to change. Compared against availableWidth/
   // availableHeight, not the raw window width/height, on purpose: both are already gutter/inset-
   // capped when fullScreen is off (see their own comment above), and designWidth/designHeight were
-  // themselves computed from whatever availableWidth/availableHeight were at round start — comparing
+  // themselves computed from whatever availableWidth/availableHeight were at round start - comparing
   // against the SAME live, equally-capped quantities is what keeps a live resize honoring that cap
   // instead of scaling straight back up to the raw window and erasing it. Comparing against raw
   // `width`/`height` here would do exactly that: undo the gutter/inset the instant the window
@@ -465,7 +465,7 @@ export default function GameScreen() {
   const boardScale = Math.min(availableWidth / designWidth, availableHeight / designHeight)
 
   // The Quit Match? and Paused dialogs' shared message. Solo gets its own score-only message (no
-  // opponent to show a "–" pairing against); vsCpu/twoPlayer show both scores in each snake's own
+  // opponent to show a "-" pairing against); vsCpu/twoPlayer show both scores in each snake's own
   // color, same colored-segment convention the other apps use.
   const progressMessage =
     mode === 'solo' ? (
@@ -473,20 +473,20 @@ export default function GameScreen() {
     ) : (
       <>
         <Text style={{ color: state.snakes[0]?.color ?? fgMuted }}>{humanScore}</Text>
-        <Text style={{ color: fgMuted }}> – </Text>
+        <Text style={{ color: fgMuted }}> - </Text>
         <Text style={{ color: state.snakes[1]?.color ?? fgMuted }}>{opponentScore ?? 0}</Text>
       </>
     )
   return (
     <View style={[styles.root, { backgroundColor: bg }]}>
-      {/* Hidden only here, not on /loadout or the title screen — matches BoxHockey's/LightCycles'/
+      {/* Hidden only here, not on /loadout or the title screen - matches BoxHockey's/LightCycles'/
       AirHockey's identical per-screen override. Unconditional: hidden for the whole time a round
       is in progress, for full-screen immersion during actual play. Reverts to whatever
       _layout.tsx's own RotationAwareStatusBar says the instant this screen unmounts. */}
       <StatusBar hidden />
       {/* Explicit top/bottom/left/right edges from insets (not a flex-centered shrink within a
-      full-bleed parent) so an asymmetric inset — a landscape notch/Dynamic Island sitting on just
-      one side, for instance — still produces a genuinely safe rectangle instead of one that's
+      full-bleed parent) so an asymmetric inset - a landscape notch/Dynamic Island sitting on just
+      one side, for instance - still produces a genuinely safe rectangle instead of one that's
       merely the right SIZE but mis-centered relative to it. fullScreen swaps in boardAreaFullBleed,
       bleeding the board all the way to the physical screen edge instead. Mirrors LightCycles'
       identical boardArea/boardAreaFullBleed split. */}
@@ -509,16 +509,16 @@ export default function GameScreen() {
       {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(seatStats(1).byMode[mode].bestScore, humanScore)} isNewHighScore={newHighScoreSeats[1] ?? false} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} achievementUnlocks={mode === 'twoPlayer' ? achievementUnlocks : undefined} achievementOwners={achievementOwners} seatResults={mode === 'twoPlayer' && state.outcome ? { 1: gameOverSeatResult(1), 2: gameOverSeatResult(2) } : undefined} rotation={overlayRotation} />}
 
       {/* Kept as its own sibling of the board/gesture tree above, mirroring LightCycles'/BoxHockey's
-      identically-motivated MatchOverlays split — this live tilt subscription's re-renders should
+      identically-motivated MatchOverlays split - this live tilt subscription's re-renders should
       never cascade into the board/touch-input subtree. showBack now matches showSettings' own
-      gameOver gating (previously back-only during onboarding) — matches BoxHockey's/AirHockey's/
+      gameOver gating (previously back-only during onboarding) - matches BoxHockey's/AirHockey's/
       Pong's identical always-available back button, so there's a consistent way out of a finished
       round beyond GameOverDialog's own Home button. */}
       <GameActionChips showBack={controlsVisible} showSettings={controlsVisible} onBack={requestBack} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} />
       <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={overlayRotation} />
 
       {/* Fleet-shared @tastic/hud ConfirmDialog, matching BoxHockey's/AirHockey's/LightCycles'/
-      Pong's identical "Quit Match?" prompt — see onBackPress's own comment above for why it's
+      Pong's identical "Quit Match?" prompt - see onBackPress's own comment above for why it's
       gated on there being an actual score to lose. Its message is progressMessage above. */}
       <ConfirmDialog visible={confirmVisible} title='Quit Match?' message={progressMessage} confirmLabel='Quit' cancelLabel='Cancel' icon='alert-circle-outline' destructive={false} onConfirm={safeBack} onCancel={cancelBack} rotation={overlayRotation} />
       {/* Shown when the app comes back from the background mid-match (see useBackgroundPause above):
@@ -533,7 +533,7 @@ interface GameActionChipsProps {
   showSettings: boolean
   onBack: () => void
   onSettings: () => void
-  // Solo and vsCpu both report a single human regardless of live orientationMode — see
+  // Solo and vsCpu both report a single human regardless of live orientationMode - see
   // needsSharedNeutralZone's own doc for why that (not bare orientationMode) is what actually
   // decides whether the neutral slot is needed.
   humanPlayerCount: number
@@ -541,12 +541,12 @@ interface GameActionChipsProps {
 
 // Back/settings chips. Two structurally different layouts, not just two positions:
 //
-// Shared neutral zone (needsSharedNeutralZone — 2 human players, face-to-face): both players read
+// Shared neutral zone (needsSharedNeutralZone - 2 human players, face-to-face): both players read
 // this same pair of chips from opposite sides of the device, so they sit on whichever dividing line
-// is actually live right now rather than a fixed corner — unlike LightCycles'/BoxHockey's boards
+// is actually live right now rather than a fixed corner - unlike LightCycles'/BoxHockey's boards
 // (always face-to-face, so the wall/midline is always horizontal), Snake's board genuinely supports
 // both face-to-face AND side-by-side (see TouchInputLayer.tsx/OnboardingOverlay.tsx's own zone
-// splits, both of which switch on the same live orientationMode) — but needsSharedNeutralZone is
+// splits, both of which switch on the same live orientationMode) - but needsSharedNeutralZone is
 // only ever true for face-to-face (side-by-side already gives each seat its own dedicated half, see
 // its own doc), so the neutral line itself is always the horizontal seam OnboardingOverlay's
 // zoneTop/zoneBottom split already establishes; edgeSlotVertical (full height, fixed left/right edge,
@@ -555,11 +555,11 @@ interface GameActionChipsProps {
 // zone is now upside-down to the OTHER seat instead of staying neutral, the same reason BoxHockey's
 // board-anchored buttons never move either.
 //
-// Corner layout (solo, vsCpu, or 2P side-by-side — no second seat's zone to protect): the same
+// Corner layout (solo, vsCpu, or 2P side-by-side - no second seat's zone to protect): the same
 // top-left/top-right corners every other screen in the fleet uses (see index.tsx's trophy/settings
 // buttons), wrapped in FakeLandscapeView so the pair actually MOVES to wherever "top" visually is
-// right now — including a portrait upside-down hold, which the neutral branch's fixed-zone rotation
-// deliberately ignores — rather than just spinning in place while staying glued to the device's fixed
+// right now - including a portrait upside-down hold, which the neutral branch's fixed-zone rotation
+// deliberately ignores - rather than just spinning in place while staying glued to the device's fixed
 // physical top edge.
 //
 // Both branches read the one shared orientation reading, so Lock Orientation (frozen app-wide by
@@ -621,19 +621,19 @@ const styles = StyleSheet.create({
   boardArea: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'absolute' },
   boardAreaFullBleed: { bottom: 0, left: 0, right: 0, top: 0 },
   chipButton: { margin: 0 },
-  // box-none: this full-bleed wrapper only exists to give FakeLandscapeView something to rotate —
+  // box-none: this full-bleed wrapper only exists to give FakeLandscapeView something to rotate -
   // it must never itself swallow the board's own touches in the (mostly empty) space between the
   // two corner slots below.
   cornerChipsWrap: { pointerEvents: 'box-none' },
   cornerSlot: { position: 'absolute' },
   // Face-to-face: full screen height at a fixed left/right edge, button centered vertically via
-  // justifyContent — lands exactly on the horizontal 50/50 zone split (see OnboardingOverlay's own
+  // justifyContent - lands exactly on the horizontal 50/50 zone split (see OnboardingOverlay's own
   // zoneTop/zoneBottom), the one strip of the board neither snake's own zone claims.
   edgeSlotVertical: { alignItems: 'center', bottom: 0, justifyContent: 'center', position: 'absolute', top: 0 },
   // alignItems/justifyContent center the design-resolution board+touch View (see boardScale's own
   // comment) inside root's live bounds. Every other direct child here (KeyboardInputLayer,
   // OnboardingOverlay, GameOverDialog, GameActionChips, SettingsDialog) positions itself via
   // StyleSheet.absoluteFill or explicit position:'absolute' styles of its own, so centering root
-  // has no effect on any of them — only the board's normal-flow scaled View actually gets centered.
+  // has no effect on any of them - only the board's normal-flow scaled View actually gets centered.
   root: { alignItems: 'center', flex: 1, justifyContent: 'center' }
 })

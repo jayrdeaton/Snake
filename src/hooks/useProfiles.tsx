@@ -8,7 +8,7 @@ import { SnakeId } from '@/types'
 import { SplashGate } from '@/utils/splashGate'
 
 // Same group id BoxHockey and LightCycles both declare in app.json's ios.entitlements (and any
-// future @tastic game that wants into the same shared roster) — see @tastic/profile's own README
+// future @tastic game that wants into the same shared roster) - see @tastic/profile's own README
 // for why only the base identity fields travel through this.
 const SHARED_GROUP_ID = 'group.com.infinitetoken.tastic'
 
@@ -16,7 +16,7 @@ interface ProfilesContextValue {
   profiles: Profile[]
   lastSelected: Record<SnakeId, string | null>
   // True once the one-time initial reconciliation below (redux-persist's own already-rehydrated
-  // `profiles` against the shared App Group store) has completed — see ProfilesProvider's own doc.
+  // `profiles` against the shared App Group store) has completed - see ProfilesProvider's own doc.
   // Marks the 'profiles' splash gate (utils/splashGate.ts) and gates ProfilesProvider's own
   // children, so a lazy useState initializer downstream (like loadout.tsx's own p1Color/p2Color)
   // never locks onto a pre-reconciliation snapshot.
@@ -36,16 +36,16 @@ interface Props {
 }
 
 // Single source of truth for saved player profiles, mounted once in _layout.tsx alongside
-// OrientationProvider — expo-router keeps prior screens mounted, so a per-screen copy could go
+// OrientationProvider - expo-router keeps prior screens mounted, so a per-screen copy could go
 // stale or clobber a concurrent update.
 //
 // `profiles` itself now lives in Redux (redux/store.ts's `profiles` key, @tastic/profile's own
-// profilesReducer) — persisted locally the same way every other slice is (redux-persist), with the
+// profilesReducer) - persisted locally the same way every other slice is (redux-persist), with the
 // shared App Group roster layered on top as a separate, cross-app sync target (see
 // resolveInitialProfiles/useSharedProfilesSync below). `lastSelected` is its own small
-// redux/profileSelectionSlice.ts — which profile seat 1/2 last picked is naturally a per-app thing,
+// redux/profileSelectionSlice.ts - which profile seat 1/2 last picked is naturally a per-app thing,
 // never shared cross-app. Mirrors BoxHockey's/Pong's/AirHockey's identically-shaped
-// useProfiles.tsx — no per-seat extension field here either, so `profiles` below is exactly the
+// useProfiles.tsx - no per-seat extension field here either, so `profiles` below is exactly the
 // Redux slice, unmodified.
 export function ProfilesProvider({ children }: Props) {
   const profiles = useSelector((state: RootState) => state.profiles)
@@ -55,13 +55,13 @@ export function ProfilesProvider({ children }: Props) {
 
   useEffect(() => {
     let cancelled = false
-    // PersistGate (an ancestor — see components/Providers.tsx) already blocks this component from
+    // PersistGate (an ancestor - see components/Providers.tsx) already blocks this component from
     // mounting until redux-persist has rehydrated, so `profiles` here is already whatever this
-    // device last had locally — resolveInitialProfiles reconciles that against the shared App
+    // device last had locally - resolveInitialProfiles reconciles that against the shared App
     // Group store (if available), seeding the shared store from it on a first sync, or preferring
     // the shared roster once anything has been shared. A one-time reconciliation against the
     // mount-time snapshot, deliberately not a resync whenever `profiles` changes afterward (the
-    // empty deps array below is intentional, not a missed dependency — resolved's own setAll
+    // empty deps array below is intentional, not a missed dependency - resolved's own setAll
     // dispatch would otherwise re-trigger this effect).
     resolveInitialProfiles(SHARED_GROUP_ID, profiles).then((resolved) => {
       if (cancelled) return
@@ -78,7 +78,7 @@ export function ProfilesProvider({ children }: Props) {
 
   // Mirrors local writes out to the shared store (syncToShared, called from each CRUD function
   // below) and picks up remote writes a sibling @tastic app made while this one was backgrounded
-  // (onRemoteChange) — see @tastic/profile's own doc for both.
+  // (onRemoteChange) - see @tastic/profile's own doc for both.
   const { syncToShared } = useSharedProfilesSync({
     groupId: SHARED_GROUP_ID,
     onRemoteChange: useCallback(
@@ -127,8 +127,8 @@ export function ProfilesProvider({ children }: Props) {
 
   return (
     <ProfilesContext.Provider value={{ profiles, lastSelected, loaded, createProfile, updateProfile, deleteProfile, selectProfile }}>
-      {/* Withholds children — everything downstream of this provider, including /loadout's own
-      lazy useState(() => profile?.color ...) initializers — until the reconciliation effect above
+      {/* Withholds children - everything downstream of this provider, including /loadout's own
+      lazy useState(() => profile?.color ...) initializers - until the reconciliation effect above
       has fully resolved, so nothing can lock onto a pre-reconciliation snapshot. See
       utils/splashGate.ts and @rific/splash-gate's own README ("Guarding against a child that
       renders before its data does") for the general pattern this follows. */}

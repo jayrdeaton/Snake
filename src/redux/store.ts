@@ -57,7 +57,7 @@ const rootReducer = combineReducers({
   liveplay,
   // The shared App Group roster (see @tastic/profile's resolveInitialProfiles/
   // useSharedProfilesSync, wired in hooks/useProfiles.tsx) is layered on top of this as a separate
-  // sync target — this slice persisting normally via redux-persist, same as every other key here,
+  // sync target - this slice persisting normally via redux-persist, same as every other key here,
   // is what gives it local-fallback behavior for the platforms/builds where the shared store isn't
   // available, with no separate hand-rolled AsyncStorage path needed for that case.
   profiles: profilesReducer,
@@ -82,7 +82,7 @@ const persistConfig = {
   // redux-persist defaults `timeout` to 5000ms: a failsafe setTimeout scheduled on every PERSIST
   // dispatch to force-resolve rehydrate if storage never responds. It's never cleared once
   // rehydrate resolves normally (only guarded by an internal `_sealed` flag), so it sits as a
-  // pending timer for up to 5s after every store creation — under Jest that's a real open handle
+  // pending timer for up to 5s after every store creation - under Jest that's a real open handle
   // ("A worker process has failed to exit gracefully"), confirmed via `jest --detectOpenHandles`
   // pointing straight at persistReducer.js's setTimeout. Disabling it (falsy timeout skips the
   // setTimeout call entirely) is redux-persist's own documented way to opt out; AsyncStorage reads

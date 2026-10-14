@@ -3,11 +3,11 @@ import { buildArenaObstacles, buildArenaPortals, buildArenaTunnels, PILLAR_SPAWN
 import { faceToFaceSpawnPoint, soloSpawnPoint } from '@/utils/grid'
 
 // Comfortably above every arena's own minimum threshold (see arenas.ts's own header comment on
-// where these numbers come from) — hand-verified below to produce a specific, known layout for
-// each variant, both for 2 snakes and for solo (which passes its one spawn point as both heads —
+// where these numbers come from) - hand-verified below to produce a specific, known layout for
+// each variant, both for 2 snakes and for solo (which passes its one spawn point as both heads -
 // see arenas.ts's own spawnHeadsFor comment for why that's correct, not a special case).
 const LARGE_GRID = { cols: 40, rows: 30 }
-// Below every variant's own minimum on both axes — every generator should gracefully degrade to
+// Below every variant's own minimum on both axes - every generator should gracefully degrade to
 // an empty/no-op result rather than producing a cramped or invalid layout.
 const TINY_GRID = { cols: 6, rows: 8 }
 
@@ -23,7 +23,7 @@ function hasCell(cells: GridCell[], cell: GridCell): boolean {
   return cells.some((c) => c.x === cell.x && c.y === cell.y)
 }
 
-// Counts maximal runs of x-values in [0, cols) that are NOT present in `cells` for the given row —
+// Counts maximal runs of x-values in [0, cols) that are NOT present in `cells` for the given row -
 // i.e. the "gap" openings through a gauntlet wall. Two distinct runs is exactly what the two-gaps-
 // per-wall design (see arenas.ts's own GAUNTLET_GAP_WIDTH_FRACTION comment) should produce, checked
 // structurally here rather than by hand-deriving the exact gap boundaries.
@@ -55,7 +55,7 @@ describe('buildArenaObstacles', () => {
 
     it('places all 5 pips (center + 2 mirrored corner pairs) when every one clears spawn distance', () => {
       const obstacles = buildArenaObstacles('pillars', LARGE_GRID, 2)
-      // 5 pips x 9 cells (a radius-1 3x3 block each) — see arenas.ts's own blockCells/buildPillars.
+      // 5 pips x 9 cells (a radius-1 3x3 block each) - see arenas.ts's own blockCells/buildPillars.
       expect(obstacles).toHaveLength(45)
       const head1 = faceToFaceSpawnPoint(1, LARGE_GRID).head
       const head2 = faceToFaceSpawnPoint(2, LARGE_GRID).head
@@ -67,7 +67,7 @@ describe('buildArenaObstacles', () => {
 
     it('solo: drops exactly the center pip (which would otherwise sit on the one spawn point), keeps both corner pairs', () => {
       const obstacles = buildArenaObstacles('pillars', LARGE_GRID, 1)
-      // 4 surviving pips x 9 cells — the center pip's own group fails isGroupClear against the
+      // 4 surviving pips x 9 cells - the center pip's own group fails isGroupClear against the
       // solo spawn (distance 0), so it alone is dropped; the corner pairs are far enough away.
       expect(obstacles).toHaveLength(36)
       const head = soloSpawnPoint(LARGE_GRID).head
@@ -98,7 +98,7 @@ describe('buildArenaObstacles', () => {
     it('solo: drops a wall entirely when its mirrored position would land within clearance of the one spawn', () => {
       // On LARGE_GRID both symmetric wall positions land within GAUNTLET_SPAWN_CLEARANCE_CELLS of
       // the single spawn's own row (axisCenter collapses to exactly the spawn's row when
-      // head1Along === head2Along — see arenas.ts's own axisSum comment) — a real, meaningful
+      // head1Along === head2Along - see arenas.ts's own axisSum comment) - a real, meaningful
       // fairness/safety check, not just an empty-input edge case.
       expect(buildArenaObstacles('gauntlet', LARGE_GRID, 1)).toEqual([])
     })
@@ -156,7 +156,7 @@ describe('buildArenaTunnels', () => {
     const { cells } = tunnels[0]
     expect(cells).toHaveLength(TUNNEL_LENGTH_CELLS)
     const xs = new Set(cells.map((c) => c.x))
-    expect(xs.size).toBe(1) // a single vertical run — Snake's one split axis, see arenas.ts's own header comment
+    expect(xs.size).toBe(1) // a single vertical run - Snake's one split axis, see arenas.ts's own header comment
     for (let i = 1; i < cells.length; i++) expect(cells[i].y).toBe(cells[i - 1].y + 1)
   })
 

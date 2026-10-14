@@ -10,26 +10,26 @@ import { SnakeId } from '@/types'
 
 export interface OnboardingOverlayProps {
   onComplete: () => void
-  // Drives the single-zone-vs-split decision below — NOT snakes.length. Vs CPU has two snakes on
+  // Drives the single-zone-vs-split decision below - NOT snakes.length. Vs CPU has two snakes on
   // the board but only one human ever watching/reading this overlay, so it gets the same one,
   // untinted-toward-a-second-seat full-board zone Solo does; only 2 Player (humanPlayers.length===2)
   // actually needs a real second person's own half, complete with that half's own 180°-flipped
   // digit so it reads right-side-up from THEIR physical side of the device. Mirrors LightCycles'
-  // OnboardingOverlay's identical humanPlayers-gated branch exactly (see that file's own comment) —
+  // OnboardingOverlay's identical humanPlayers-gated branch exactly (see that file's own comment) -
   // Snake's own earlier port of this file had collapsed the distinction into a 'solo'|'dual' mode
   // derived from snake COUNT instead of human count, which is what let Vs CPU wrongly inherit the
   // two-real-people split treatment.
   humanPlayers: SnakeId[]
-  // snake1 is always required — every mode has at least one (human) snake. snake2 is present
+  // snake1 is always required - every mode has at least one (human) snake. snake2 is present
   // whenever a second snake exists on the board at all (Vs CPU's CPU included, even though its
-  // color only actually gets used below when humanPlayers.length is 2 — i.e. Vs CPU's own CPU-
+  // color only actually gets used below when humanPlayers.length is 2 - i.e. Vs CPU's own CPU-
   // colored zone is simply never rendered, matching the single-zone branch not needing it).
   colors: { snake1: string; snake2?: string }
 }
 
 const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
 
-// A temporary UI layer over the board — not part of the Skia canvas (see SnakeBoard.tsx's own
+// A temporary UI layer over the board - not part of the Skia canvas (see SnakeBoard.tsx's own
 // header comment). Ported from LightCycles' OnboardingOverlay.tsx: a "3, 2, 1, GO!" countdown that
 // fades out and calls onComplete. Dropped relative to that version, per the build brief: round-
 // history pips (no match-series/rematch concept in Snake) are gone entirely. Rotation is computed
@@ -52,7 +52,7 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
     soundRef.current = { playCountdownTick, playCountdownGo }
   }, [playCountdownTick, playCountdownGo])
 
-  // Fires alongside every digit change, including the initial "3" on mount — kept as its own
+  // Fires alongside every digit change, including the initial "3" on mount - kept as its own
   // effect (rather than folded into the mount-only timer effect below) so the countdown's own
   // scheduling stays untouched by which sound happens to play for a given stage.
   useEffect(() => {
@@ -82,8 +82,8 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
 
   const countdown = COUNTDOWN_STAGES[stageIndex]
 
-  // Solo AND Vs CPU both land here — see humanPlayers' own doc above for why snake count isn't
-  // what gates this. Tinted in the lone human's own color (snake1 — see types/index.ts's own
+  // Solo AND Vs CPU both land here - see humanPlayers' own doc above for why snake count isn't
+  // what gates this. Tinted in the lone human's own color (snake1 - see types/index.ts's own
   // "snake 1 is always the human" convention) rather than left plain, so this zone reads
   // consistently with the two-zone case below instead of looking like a different, simpler mode.
   if (humanPlayers.length === 1) {
@@ -99,8 +99,8 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
     )
   }
 
-  // Only reachable with humanPlayers.length === 2 (2 Player — the only mode with a second human at
-  // all), which always has a real second snake on the board too — colors.snake2 is only typed
+  // Only reachable with humanPlayers.length === 2 (2 Player - the only mode with a second human at
+  // all), which always has a real second snake on the board too - colors.snake2 is only typed
   // optional because the single-zone branch above never needs it, not because it can actually be
   // missing here. Guards anyway rather than a non-null assertion, in case that invariant ever
   // drifts.
@@ -144,12 +144,12 @@ const styles = StyleSheet.create({
     position: 'absolute'
   },
   zoneBottom: { bottom: 0, left: 0, right: 0, top: '50%' },
-  // alignItems/justifyContent (centering the countdown digit) already come from `zone` itself —
+  // alignItems/justifyContent (centering the countdown digit) already come from `zone` itself -
   // this only needs to add the four edge insets `zone`'s own bare `position: 'absolute'` doesn't
   // supply on its own, same as zoneBottom/zoneLeft/zoneRight/zoneTop each do for their own quarter/
   // half of the screen. Previously missing these, which silently shrank the single-zone case (see
   // OnboardingOverlayProps' own humanPlayers doc) down to its content's own natural size instead of
-  // filling the screen — never caught before because the old solo-only render path applied
+  // filling the screen - never caught before because the old solo-only render path applied
   // StyleSheet.absoluteFill directly to the outer Animated.View instead of routing through `zone`.
   zoneFull: { bottom: 0, left: 0, right: 0, top: 0 },
   zoneLeft: { bottom: 0, left: 0, right: '50%', top: 0 },

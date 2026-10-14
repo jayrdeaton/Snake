@@ -7,10 +7,10 @@ import type { RootState } from '@/redux/store'
 import { AchievementDefinition, SnakeId, StatsState, UnlockedAchievementsState } from '@/types'
 import { applyRoundOutcome, getProfileStatsView, RoundContext, RoundOutcome } from '@/utils/statsEngine'
 
-// Returned by recordRoundOutcome below — `device` is the device-wide/"All Profiles" newly-unlocked
+// Returned by recordRoundOutcome below - `device` is the device-wide/"All Profiles" newly-unlocked
 // list (no seat owner), `profiles` is a parallel per-seat breakdown of whatever THAT seat's own
 // profile newly unlocked. Solo/Vs CPU merge both into one flat toast list at the call site
-// (game.tsx) — only 2 Player needs the seat split, to show each unlock next to the seat that
+// (game.tsx) - only 2 Player needs the seat split, to show each unlock next to the seat that
 // actually earned it instead of a single screen-fixed toast neither seat's zone belongs to.
 export interface RecordRoundOutcomeResult {
   device: AchievementDefinition[]
@@ -20,7 +20,7 @@ export interface RecordRoundOutcomeResult {
 interface GameStatsContextValue {
   stats: StatsState
   unlockedAchievements: UnlockedAchievementsState
-  // Returns whatever newly unlocked this round, split device-wide vs per-seat — see
+  // Returns whatever newly unlocked this round, split device-wide vs per-seat - see
   // RecordRoundOutcomeResult above for why the caller needs both instead of one merged list.
   recordRoundOutcome: (outcome: RoundOutcome, context: RoundContext) => RecordRoundOutcomeResult
   resetAll: () => void
@@ -50,7 +50,7 @@ export function GameStatsProvider({ children }: { children: ReactNode }) {
 
       // The package reports per-profile unlocks keyed by profile id, since it has no notion of
       // seats; callers think in seats, so translate back through the same profileIds map that
-      // produced them — same translation LightCycles' own recordRoundOutcome does, now shared via
+      // produced them - same translation LightCycles' own recordRoundOutcome does, now shared via
       // @tastic/achievements' own mapUnlocksBySeat.
       const profiles = mapUnlocksBySeat([1, 2] as SnakeId[], context.profileIds, result.profiles)
 

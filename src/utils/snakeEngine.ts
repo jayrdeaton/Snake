@@ -6,24 +6,24 @@ import { Direction, GridCell, GridSize, RoundOutcome, SnakeControlEffect, SnakeE
 import { buildArenaObstacles, buildArenaPortals, buildArenaTunnels } from './arenas'
 import { faceToFaceSpawnPoint, soloSpawnPoint } from './grid'
 
-// Every snake starts as a straight 3-segment body — long enough to have a real tail distinct from
+// Every snake starts as a straight 3-segment body - long enough to have a real tail distinct from
 // its head (so the tail-vacate rule below has something to demonstrate) without any board being
 // too small to spawn one.
 export const SNAKE_START_LENGTH = 3
 
-// Default per-seat colors — Solo (which skips /loadout, so has no per-round colors to pass in) and
+// Default per-seat colors - Solo (which skips /loadout, so has no per-round colors to pass in) and
 // any other caller that doesn't supply its own `colors` fall back to these. Vs CPU/2 Player let
-// /loadout override them per round (see createInitialSnakeState's own `colors` param) — the same
+// /loadout override them per round (see createInitialSnakeState's own `colors` param) - the same
 // role LightCycles' `colors: Record<Player, string>` param plays for its own createInitialGameState.
 // Also the app's own theme identity: store.ts feeds these straight into @rific/auto-paper as the
 // primary/secondary of its color triad (tertiary derived via getThirdColor), so player 1's default
-// color IS the app's primary and player 2's default color IS its secondary — not a coincidence.
+// color IS the app's primary and player 2's default color IS its secondary - not a coincidence.
 export const SNAKE_COLORS: Record<SnakeId, string> = { 1: '#2E7D32', 2: '#FBC02D' }
 
 const REVERSE_DIRECTION: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' }
 
 // Lays out a fresh snake's body trailing straight behind its head, opposite its direction of
-// travel — e.g. a snake heading 'up' gets a tail trailing downward, toward its own board edge (see
+// travel - e.g. a snake heading 'up' gets a tail trailing downward, toward its own board edge (see
 // faceToFaceSpawnPoint's own comment for why that matters in the 2-snake case). Oldest-first,
 // matching SnakeEntity.body's convention: index 0 is the tail, the last element is the head.
 function buildInitialBody(head: GridCell, direction: Direction, length: number): GridCell[] {
@@ -52,7 +52,7 @@ function buildSnake(id: SnakeId, spawn: { head: GridCell; direction: Direction }
   }
 }
 
-// Every cell any snake currently occupies, plus the round's static arena obstacles — the shared
+// Every cell any snake currently occupies, plus the round's static arena obstacles - the shared
 // "what's blocked" set food/pickup-spawning reads from (see pickRandomEmptyCell below) and CPU
 // pathing reads from (see snakeAi.ts). `obstacles` defaults to [] so any existing call site/test
 // that only ever passed `snakes` keeps compiling and behaves exactly as before (an 'open' round has
@@ -71,8 +71,8 @@ function occupiedFromBodies(bodies: GridCell[][], obstacles: GridCell[]): Set<st
   return occupied
 }
 
-// Symmetric a<->b lookup for the round's portal pair(s) — mirrors LightCycles' buildPortalLookup.
-// Portal cells are deliberately absent from buildSnakeOccupiedSet's own output — entering one
+// Symmetric a<->b lookup for the round's portal pair(s) - mirrors LightCycles' buildPortalLookup.
+// Portal cells are deliberately absent from buildSnakeOccupiedSet's own output - entering one
 // redirects the mover during movement resolution (see tickSnake below), it never crashes them.
 // Exported for snakeAi.ts's own lookahead, which needs the identical portal-aware stepping tickSnake
 // itself uses so the CPU's own safety scoring can never disagree with what actually happens to it.
@@ -85,7 +85,7 @@ export function buildPortalLookup(portals: SnakePortal[]): Map<string, GridCell>
   return lookup
 }
 
-// Flat membership set of every cell across the round's tunnel corridor — see types/index.ts's own
+// Flat membership set of every cell across the round's tunnel corridor - see types/index.ts's own
 // SnakeTunnel comment for why membership alone (no per-snake exclusion layer) is enough here.
 // Exported for snakeAi.ts's own lookahead, same reasoning as buildPortalLookup above.
 export function buildTunnelCellSet(tunnels: SnakeTunnel[]): Set<string> {
@@ -94,10 +94,10 @@ export function buildTunnelCellSet(tunnels: SnakeTunnel[]): Set<string> {
   return cells
 }
 
-// Uniformly-random empty-cell scan for food/pickup placement — no clearance-radius check needed,
+// Uniformly-random empty-cell scan for food/pickup placement - no clearance-radius check needed,
 // unlike LightCycles' powerup spawn: Snake's collectibles are a single exact-cell target a snake
 // either lands on or doesn't. `excludeCells` covers cells that are technically "empty" (no body/
-// obstacle) but still shouldn't host a collectible — portal/tunnel cells (a collectible could never
+// obstacle) but still shouldn't host a collectible - portal/tunnel cells (a collectible could never
 // actually be landed on there, see buildArenaPortals' own redirect-before-any-check behavior) and,
 // new since powerups, the OTHER live collectible's own cell (food and a pickup can now be on the
 // board at once, something this app never had to keep apart before).
@@ -119,13 +119,13 @@ function pickupId(tick: number, cell: GridCell): string {
   return `pu-${tick}-${cell.x}-${cell.y}`
 }
 
-// The grid-cell margin along each edge that falls inside the device's own safe-area inset —
+// The grid-cell margin along each edge that falls inside the device's own safe-area inset -
 // `insetsPx` is expected to already be zeroed out by the caller (see GameScreen's own fullScreen
 // branch) whenever the board ISN'T bleeding under it, since otherwise the board's pixel container
 // already stops short of the inset and every cell is already clear of it; this function itself
 // stays agnostic of that setting. Mirrors LightCycles' identical buildUnsafeAreaCells. Ceil'd up to
 // whole cells so food/a pickup can never spawn partially under the notch/Dynamic Island/
-// home-indicator/speaker cutout — better to lose a cell of margin than leave one still hidden.
+// home-indicator/speaker cutout - better to lose a cell of margin than leave one still hidden.
 function buildUnsafeAreaCells(grid: GridSize, cellPx: number, insetsPx: { top: number; right: number; bottom: number; left: number }): GridCell[] {
   const marginTop = Math.ceil(insetsPx.top / cellPx)
   const marginBottom = Math.ceil(insetsPx.bottom / cellPx)
@@ -142,11 +142,11 @@ function buildUnsafeAreaCells(grid: GridSize, cellPx: number, insetsPx: { top: n
 }
 
 // `settings.arenaVariant`/`settings.enabledPowerups` default this round's obstacle layout and
-// powerup pool; `snakeCount` is 1 (Solo) or 2 (Vs CPU / 2 Player) — identical spawn either way for
+// powerup pool; `snakeCount` is 1 (Solo) or 2 (Vs CPU / 2 Player) - identical spawn either way for
 // 2, a face-to-face pair on opposite halves of the board. `colors` lets /loadout's per-round color
 // pickers override the SNAKE_COLORS defaults. `random` defaults to Math.random so every existing
 // call site behaves normally, while a test can inject a seeded/fixed generator. `cellPx`/
-// `safeAreaInsetsPx` default to 1/all-zero (no margin) — see buildUnsafeAreaCells above — so every
+// `safeAreaInsetsPx` default to 1/all-zero (no margin) - see buildUnsafeAreaCells above - so every
 // existing call site/test (predating safe-area avoidance) stays byte-identical.
 export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, settings: SnakeRoundSettings, colors?: Partial<Record<SnakeId, string>>, random: () => number = Math.random, cellPx: number = 1, safeAreaInsetsPx: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 }): SnakeGameState {
   const color1 = colors?.[1] ?? SNAKE_COLORS[1]
@@ -160,12 +160,12 @@ export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, setti
   const arenaCellSet = new Set<string>([...buildTunnelCellSet(tunnels), ...buildPortalLookup(portals).keys(), ...unsafeCells.map(cellKey)])
 
   // Solo has no opponent, so the four opponent-targeted powerups (coldblood/constrict/mesmerize/
-  // frenzy) would never do anything — see types/index.ts's own SnakePowerupType comment. Filtered
+  // frenzy) would never do anything - see types/index.ts's own SnakePowerupType comment. Filtered
   // once here, into the EFFECTIVE pool stored on state, so the tick loop and pickup-spawn logic
   // below never need mode-awareness of their own.
   const enabledPowerups = snakeCount === 1 ? settings.enabledPowerups.filter((type) => type === 'sidewind' || type === 'scales') : settings.enabledPowerups
 
-  // Falls back to the origin cell only if the board is so small every cell is already blocked —
+  // Falls back to the origin cell only if the board is so small every cell is already blocked -
   // never expected on any real playable grid, but keeps this total rather than throwing.
   const food = pickRandomEmptyCell(grid, buildSnakeOccupiedSet(snakes, obstacles), random, arenaCellSet) ?? { x: 0, y: 0 }
 
@@ -174,9 +174,9 @@ export function createInitialSnakeState(grid: GridSize, snakeCount: 1 | 2, setti
 
 // Queues a turn for the next tick. Ignored outside 'playing', for a dead snake, an unknown
 // `snakeId`, a direction matching the current heading (no-op already), or a 180° reversal into the
-// snake's own body — enforced here, once, rather than by every input source (human swipe or CPU
+// snake's own body - enforced here, once, rather than by every input source (human swipe or CPU
 // decision) that could dispatch a turn. Reuses isOppositeDirection verbatim from grid.ts. A snake
-// currently frozen (Coldblood, 0 steps this tick) can still queue a turn here — it just won't move
+// currently frozen (Coldblood, 0 steps this tick) can still queue a turn here - it just won't move
 // until it unfreezes; see tickSnake's own direction/pendingDirection resolution for why that's safe
 // across multiple frozen ticks.
 export function applySnakeTurnIntent(state: SnakeGameState, snakeId: SnakeId, direction: Direction): SnakeGameState {
@@ -190,7 +190,7 @@ export function applySnakeTurnIntent(state: SnakeGameState, snakeId: SnakeId, di
   return { ...state, snakes: state.snakes.map((s) => (s.id === snakeId ? { ...s, pendingDirection: direction } : s)) }
 }
 
-// Cells advanced in one tickSnake sub-step loop for a boosted/frozen snake — Coldblood's 0 isn't a
+// Cells advanced in one tickSnake sub-step loop for a boosted/frozen snake - Coldblood's 0 isn't a
 // multiplier lookup, it's "skip movement entirely," checked first and explicitly. Mirrors
 // LightCycles' stepsFor exactly. Exported so snakeAi.ts's own survival scoring can walk the same
 // number of cells ahead for itself when boosted, rather than a second, potentially-drifting copy.
@@ -200,9 +200,9 @@ export function stepsForSnake(effects: SnakeEntity['effects']): number {
   return 1
 }
 
-// Effect expiry — cleared once `tick` has fully consumed the effect's own expiresAtTick. Applied
+// Effect expiry - cleared once `tick` has fully consumed the effect's own expiresAtTick. Applied
 // unconditionally, every tick, to every snake (harmless for a snake that died this same tick, since
-// the round is already over) — mirrors LightCycles' own `expire`.
+// the round is already over) - mirrors LightCycles' own `expire`.
 function expireEffects(effects: SnakeEntity['effects'], tick: number): SnakeEntity['effects'] {
   return {
     speed: effects.speed && tick >= effects.speed.expiresAtTick ? null : effects.speed,
@@ -211,7 +211,7 @@ function expireEffects(effects: SnakeEntity['effects'], tick: number): SnakeEnti
   }
 }
 
-// Slices `count` cells off the front (the tail end — see SnakeEntity.body's own convention),
+// Slices `count` cells off the front (the tail end - see SnakeEntity.body's own convention),
 // clamped so the head is never removed. Shared by Constrict's instant application below and
 // Scales' break-through trim (see trimSnakeBodyAtCell).
 function trimSnakeBodyFront(body: GridCell[], count: number): GridCell[] {
@@ -237,12 +237,12 @@ function locateBrokenBody(bodies: GridCell[][], cell: GridCell, breaker: number)
   return bodies.findIndex((body, k) => body.some((c, idx) => (k !== breaker || idx < body.length - 1) && c.x === cell.x && c.y === cell.y))
 }
 
-// Activation-side counterpart to applySnakeTurnIntent — the single choke point a held powerup's
+// Activation-side counterpart to applySnakeTurnIntent - the single choke point a held powerup's
 // effect goes through, for a human's tap or the CPU's own decision (see snakeAi.ts's
 // applyCpuSnakePowerupActivation). Clears the activating snake's single-slot inventory in every
 // branch. Same-axis effects replace rather than stack (see types/index.ts's SnakePlayerEffects).
 // Sidewind/Scales are self-targeted and work fine solo; Coldblood/Constrict/Mesmerize/Frenzy target
-// the opponent and no-op (still clearing the held slot) if there isn't one — defensive only, since
+// the opponent and no-op (still clearing the held slot) if there isn't one - defensive only, since
 // createInitialSnakeState's own solo-mode filtering already keeps these four out of solo's spawn
 // pool entirely.
 export function applySnakePowerupActivation(state: SnakeGameState, snakeId: SnakeId): SnakeGameState {
@@ -270,7 +270,7 @@ export function applySnakePowerupActivation(state: SnakeGameState, snakeId: Snak
 
   if (type === 'constrict') {
     // Proportional to the opponent's own current length (not a fixed cell count) so it stays a
-    // meaningful punish no matter how long the round has run — and deliberately leaves
+    // meaningful punish no matter how long the round has run - and deliberately leaves
     // opponent.peakLength untouched, since that's a high-water mark, not the live length (see
     // types/index.ts's own SnakeEntity.peakLength comment).
     const trimmed = trimSnakeBodyFront(opponent.body, Math.floor(opponent.body.length * SNAKE_POWERUP_CONSTRICT_FRACTION))
@@ -300,7 +300,7 @@ export function applySnakePowerupActivation(state: SnakeGameState, snakeId: Snak
 }
 
 // Advances the round exactly one tick, in 1-2 sub-steps per snake depending on any active speed
-// effect (Sidewind/Frenzy cover 2 cells this call; Coldblood covers 0) — mirrors LightCycles'
+// effect (Sidewind/Frenzy cover 2 cells this call; Coldblood covers 0) - mirrors LightCycles'
 // tickGame's own sub-step loop. Each snake still resolves exactly one queued direction for the
 // whole tick; a boosted snake just covers 2 cells in it, not two independent turns. When no snake
 // has an active effect, maxSteps is always 1 and this reduces to exactly the same single-pass
@@ -419,10 +419,10 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
     const anyDied = stepDead.some((d, i) => d && !dead[i])
     if (anyDied) {
       // A dying snake's move on THIS sub-step never commits (crashCell alone records where it
-      // would have landed — see SnakeEntity.crashCell's own comment: the body array stays exactly
+      // would have landed - see SnakeEntity.crashCell's own comment: the body array stays exactly
       // as of its last successful sub-step, the original single-step engine's own convention,
       // generalized unchanged). A snake that DIDN'T die on this sub-step, though, still commits its
-      // own move here even though the tick as a whole is about to end — dying is per-snake, not a
+      // own move here even though the tick as a whole is about to end - dying is per-snake, not a
       // global "nothing else happened this tick" flag, and the original single-pass engine (and
       // every test written against it) already relied on a survivor's own successful move landing
       // on the same tick a rival crashes (e.g. one snake eating food the exact tick the other steps
@@ -509,7 +509,7 @@ export function tickSnake(state: SnakeGameState, random: () => number = Math.ran
     food = pickRandomEmptyCell(grid, occupied, random, exclude) ?? food
   }
 
-  // Exactly one pickup on the board at a time, like the one apple — the instant it's collected (or
+  // Exactly one pickup on the board at a time, like the one apple - the instant it's collected (or
   // none has spawned yet this round) a replacement appears immediately, next tick.
   if (enabledPowerups.length > 0 && pickups.length === 0) {
     const occupied = occupiedFromBodies(bodies, obstacles)

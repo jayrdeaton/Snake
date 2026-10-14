@@ -6,7 +6,7 @@ import { faceToFaceSpawnPoint, soloSpawnPoint } from './grid'
 
 // Ported from LightCycles' utils/arenas.ts, with its OrientationMode axis-abstraction dropped
 // entirely: Snake's grid model has no side-by-side layout (see grid.ts's own comment on
-// faceToFaceSpawnPoint) — "along" is always grid.rows (the split axis, y) and "cross" is always
+// faceToFaceSpawnPoint) - "along" is always grid.rows (the split axis, y) and "cross" is always
 // grid.cols (the shared axis, x), so there's no mode parameter anywhere in this file. Solo mode
 // (one snake, no second head to mirror against) passes soloSpawnPoint as both head1 and head2 below
 // (see spawnHeadsFor), which produces correct, board-centered layouts with no special-casing:
@@ -15,11 +15,11 @@ import { faceToFaceSpawnPoint, soloSpawnPoint } from './grid'
 // both heads are equal.
 //
 // Every tuning constant below is rescaled from LightCycles' own (tuned at its GRID_CELL_PX.medium =
-// 8px) by roughly SNAKE_CELL_PX.medium/8 ≈ 2.25x fewer cells per axis for the same physical screen —
+// 8px) by roughly SNAKE_CELL_PX.medium/8 ≈ 2.25x fewer cells per axis for the same physical screen -
 // except PILLAR_BLOCK_RADIUS_CELLS (scaling to 0 would erase the "pillars read as bigger" effect the
 // constant exists for), PORTAL_MIN_COLS/ROWS (scaling down would let portals spawn on a genuinely
 // tiny grid), and GAUNTLET_GAP_WIDTH_MIN/MAX_CELLS (scaling down would make gaps too tight for a
-// snake's body — which nearly fills its own cell, same as LightCycles' cycle — to thread reliably),
+// snake's body - which nearly fills its own cell, same as LightCycles' cycle - to thread reliably),
 // which are kept closer to LightCycles' own source values instead. These are first-pass numbers:
 // verify visually against a real phone-sized grid and adjust by feel.
 
@@ -70,7 +70,7 @@ export const GAUNTLET_WALL_ALONG_FRACTIONS_TWO = [0.45, 0.55]
 export const GAUNTLET_WALL_ALONG_FRACTIONS_THREE = [0.22, 0.5, 0.78]
 export const GAUNTLET_SPAWN_CLEARANCE_CELLS = 3
 export const GAUNTLET_WALL_SPACING_CELLS = 2
-// Two gaps per wall (not one) — a single door would let one snake camp or block it and permanently
+// Two gaps per wall (not one) - a single door would let one snake camp or block it and permanently
 // strand the other on their own side.
 export const GAUNTLET_GAP_WIDTH_FRACTION = 0.18
 export const GAUNTLET_GAP_WIDTH_MIN_CELLS = 3
@@ -82,14 +82,14 @@ function chebyshevDistance(a: GridCell, b: GridCell): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 }
 
-// A group survives only if EVERY member clears both bounds and spawn distance from both heads —
+// A group survives only if EVERY member clears both bounds and spawn distance from both heads -
 // never partially, which is what guarantees a pillar/wall can never appear favoring one snake over
 // the other. In solo mode head1 === head2 (see spawnHeadsFor), so this collapses to one real check.
 function isGroupClear(group: GridCell[], grid: GridSize, head1: GridCell, head2: GridCell, clearanceCells: number): boolean {
   return group.every((cell) => isInBounds(cell, grid) && chebyshevDistance(cell, head1) >= clearanceCells && chebyshevDistance(cell, head2) >= clearanceCells)
 }
 
-// A pip's own footprint — a square block of cells centered on (alongC, crossC), radius cells in
+// A pip's own footprint - a square block of cells centered on (alongC, crossC), radius cells in
 // every direction (radius 1 = 3x3). Cells are only added to the final obstacle list once the whole
 // block has cleared isGroupClear, so a block that would clip a spawn's clearance zone at one corner
 // is dropped in its entirety, never partially.
@@ -114,12 +114,12 @@ function buildPillars(grid: GridSize, head1: GridCell, head2: GridCell): GridCel
   const crossOffset = Math.round(crossLength * PILLAR_CORNER_CROSS_OFFSET_FRACTION)
   const obstacles: GridCell[] = []
 
-  // The quincunx's middle pip — dropped alone (no mirror needed: it already sits equidistant from
+  // The quincunx's middle pip - dropped alone (no mirror needed: it already sits equidistant from
   // both heads by construction).
   const centerBlock = blockCells(alongCenter, crossCenter, PILLAR_BLOCK_RADIUS_CELLS)
   if (isGroupClear(centerBlock, grid, head1, head2, PILLAR_SPAWN_CLEARANCE_CELLS)) obstacles.push(...centerBlock)
 
-  // The four corner pips, as two along-axis mirror pairs — each pair validated atomically so a
+  // The four corner pips, as two along-axis mirror pairs - each pair validated atomically so a
   // corner pip near one head can never appear without its mirror near the other.
   const nearCrossPair = [...blockCells(alongCenter - alongOffset, crossCenter - crossOffset, PILLAR_BLOCK_RADIUS_CELLS), ...blockCells(alongCenter + alongOffset, crossCenter - crossOffset, PILLAR_BLOCK_RADIUS_CELLS)]
   if (isGroupClear(nearCrossPair, grid, head1, head2, PILLAR_SPAWN_CLEARANCE_CELLS)) obstacles.push(...nearCrossPair)
@@ -130,7 +130,7 @@ function buildPillars(grid: GridSize, head1: GridCell, head2: GridCell): GridCel
   return obstacles
 }
 
-// The two gap windows for one wall — symmetric around the wall's own cross-center, each clamped
+// The two gap windows for one wall - symmetric around the wall's own cross-center, each clamped
 // into [0, crossLength - gapWidth] independently, then nudged apart if clamping ever left them
 // touching (only possible on a crossLength barely above the minimum) so there are always genuinely
 // two separate routes through.
@@ -162,7 +162,7 @@ function buildGauntlet(grid: GridSize, head1: GridCell, head2: GridCell): GridCe
   const obstacles: GridCell[] = []
   const acceptedPositions: number[] = []
 
-  // Fractions are mirrored around 0.5 — grouping the outer pair and validating each group
+  // Fractions are mirrored around 0.5 - grouping the outer pair and validating each group
   // atomically means a wall that fails its own clearance check always takes its mirror partner down
   // with it, rather than leaving a single wall standing deep in one snake's territory.
   const groups: number[][] = []
@@ -171,7 +171,7 @@ function buildGauntlet(grid: GridSize, head1: GridCell, head2: GridCell): GridCe
   }
 
   // The axis both wall groups mirror around is the real midpoint between the two actual spawn
-  // heads, not a naive Math.floor(alongLength / 2) — see LightCycles' own arenas.ts for the parity
+  // heads, not a naive Math.floor(alongLength / 2) - see LightCycles' own arenas.ts for the parity
   // argument this sidesteps. In solo mode head1Along === head2Along, so this is just that point.
   const axisSum = head1Along + head2Along
 
@@ -204,14 +204,14 @@ function buildGauntlet(grid: GridSize, head1: GridCell, head2: GridCell): GridCe
 
 // ─── Underpass ──────────────────────────────────────────────────────────────
 // See types/index.ts's own SnakeTunnel comment for why this needs no hidden per-snake occupancy
-// layer the way LightCycles' identical-in-spirit tunnel does — Snake's body is a vacating deque,
+// layer the way LightCycles' identical-in-spirit tunnel does - Snake's body is a vacating deque,
 // not a permanent trail, so a corridor here can never get permanently sealed by an earlier crossing.
 export const TUNNEL_MIN_ALONG_LENGTH = 22
 export const TUNNEL_MIN_CROSS_LENGTH = 7
 export const TUNNEL_LENGTH_CELLS = 6
 export const TUNNEL_SPAWN_CLEARANCE_CELLS = 2
 
-// A single straight corridor, oriented along the split axis and centered at board-center — a snake
+// A single straight corridor, oriented along the split axis and centered at board-center - a snake
 // driving straight from spawn toward the opponent runs directly into the near mouth, no detour
 // required. Never mirrored into a second copy: unlike pillars/gauntlet, a tunnel blocks nothing (see
 // buildArenaObstacles' own 'underpass' branch, which always returns []), so it's already fair
@@ -234,7 +234,7 @@ function buildTunnel(grid: GridSize, head1: GridCell, head2: GridCell): SnakeTun
 }
 
 // ─── Entry points ───────────────────────────────────────────────────────────
-// Solo (1 snake) passes its one spawn point as both heads — see this file's own header comment for
+// Solo (1 snake) passes its one spawn point as both heads - see this file's own header comment for
 // why that's correct, not a special case, for every generator above.
 function spawnHeadsFor(grid: GridSize, snakeCount: 1 | 2): [GridCell, GridCell] {
   if (snakeCount === 1) {
@@ -244,10 +244,10 @@ function spawnHeadsFor(grid: GridSize, snakeCount: 1 | 2): [GridCell, GridCell] 
   return [faceToFaceSpawnPoint(1, grid).head, faceToFaceSpawnPoint(2, grid).head]
 }
 
-// Deterministic static obstacle layout for the selected arena variant — same inputs always produce
+// Deterministic static obstacle layout for the selected arena variant - same inputs always produce
 // the same cells, so a round's arena never varies for the same settings.
 export function buildArenaObstacles(variant: SnakeArenaVariant, grid: GridSize, snakeCount: 1 | 2): GridCell[] {
-  // Neither 'portals' nor 'underpass' blocks movement the way every other variant's cells do —
+  // Neither 'portals' nor 'underpass' blocks movement the way every other variant's cells do -
   // their geometry lives on SnakeGameState.portals/.tunnels instead (see buildArenaPortals/
   // buildArenaTunnels below), so both are obstacle-free exactly like 'open'.
   if (variant === 'open' || variant === 'portals' || variant === 'underpass') return []
@@ -256,7 +256,7 @@ export function buildArenaObstacles(variant: SnakeArenaVariant, grid: GridSize, 
   return buildGauntlet(grid, head1, head2)
 }
 
-// Sibling to buildArenaObstacles above rather than folded into its own return type — obstacles and
+// Sibling to buildArenaObstacles above rather than folded into its own return type - obstacles and
 // portals are different shapes with different collision semantics (see snakeEngine.ts's tickSnake).
 export function buildArenaPortals(variant: SnakeArenaVariant, grid: GridSize, snakeCount: 1 | 2): SnakePortal[] {
   if (variant !== 'portals') return []

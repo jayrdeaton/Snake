@@ -22,7 +22,7 @@ export default function HomeScreen() {
   const rotation = useRotation()
   // react-native-safe-area-context always reports insets relative to the device's own fixed
   // physical frame (the OS thinks the interface is still portrait-locked and never rotates, so it
-  // has no idea FakeLandscapeView below is rotating the content) — rotateInsets remaps them onto
+  // has no idea FakeLandscapeView below is rotating the content) - rotateInsets remaps them onto
   // whichever edge they actually correspond to once visually rotated, using the same rotation
   // FakeLandscapeView itself renders with, so `top`/`right` below always mean the screen's real,
   // visual edges regardless of how the phone is being held.
@@ -34,14 +34,14 @@ export default function HomeScreen() {
   // one screen with a single reader, before any seating. See GuideHost / @tastic/hud/guide.
   useAutoShowGuide()
 
-  // Both routes go through /loadout now — 1 Player's own CPU difficulty (including "None", Snake's
+  // Both routes go through /loadout now - 1 Player's own CPU difficulty (including "None", Snake's
   // genuine no-opponent solo mode) is picked there, in the same per-seat slot 2 Player already uses
   // for its own second human (see loadout.tsx).
   const chooseMode = useCallback((mode: 'onePlayer' | 'twoPlayer') => {
     router.push({ pathname: '/loadout', params: { mode } })
   }, [])
 
-  // High-contrast retro look: literal black/white, flipped by appearance — same treatment
+  // High-contrast retro look: literal black/white, flipped by appearance - same treatment
   // LightCycles' own index.tsx gives its title screen.
   const bg = dark ? '#000000' : '#FFFFFF'
   const fg = dark ? '#FFFFFF' : '#000000'
@@ -53,7 +53,7 @@ export default function HomeScreen() {
       Portal over the whole screen, and BaseSettingsDialog lays itself out in its own frame turned
       by the `rotation` passed below (see @tastic/hud's RotatedFrame). */}
       <FakeLandscapeView style={styles.rotatable}>
-        {/* Same top-left slot every @tastic title screen uses for this — see LightCycles' own
+        {/* Same top-left slot every @tastic title screen uses for this - see LightCycles' own
         identical trophy IconButton. */}
         <IconButton icon='trophy' iconColor={fg} size={24} style={[styles.trophyButton, { top: 8 + insets.top, left: 8 + insets.left }]} onPress={() => router.push('/achievements')} accessibilityLabel='Stats & Achievements' />
         <IconButton icon='cog' iconColor={fg} size={24} style={[styles.settingsButton, { top: 8 + insets.top, right: 8 + insets.right }]} onPress={() => setSettingsOpen(true)} accessibilityLabel='Settings' />
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   actionButton: { minWidth: 200 },
   actions: { alignItems: 'center', gap: 16 },
   container: { flex: 1 },
-  // Owns the flex-centering layout `container` used to apply directly — now one level deeper, since
+  // Owns the flex-centering layout `container` used to apply directly - now one level deeper, since
   // everything visible sits inside FakeLandscapeView, which needs a real (not shrink-wrapped)
   // full-bleed box to size its own absolutely-positioned children (the trophy/settings buttons)
   // against correctly. Matches BoxHockey's/LightCycles' own index.tsx, which give this same

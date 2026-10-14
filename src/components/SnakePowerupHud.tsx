@@ -11,11 +11,11 @@ export interface SnakePowerupHudProps {
 
 const BADGE_SIZE = 30
 
-// Both snakes' held item is always visible to both — there's no realistic way to hide it anyway on
+// Both snakes' held item is always visible to both - there's no realistic way to hide it anyway on
 // a single shared screen where each snake's own zone is already fully visible to the other (same as
 // a rival's held item being visible in Mario Kart). The item's TYPE is the only thing that's a
-// mystery (see SnakeBoardCanvas.tsx's Pickups layer) — once held, it's revealed here. Kept
-// deliberately understated (small, low-opacity, no per-snake color) — this is a quiet reference, not
+// mystery (see SnakeBoardCanvas.tsx's Pickups layer) - once held, it's revealed here. Kept
+// deliberately understated (small, low-opacity, no per-snake color) - this is a quiet reference, not
 // something that should compete for attention with the board itself. Mirrors LightCycles'
 // PowerupHud.tsx's identical HeldItemBadge.
 function HeldItemBadge({ heldPowerup }: { heldPowerup: SnakeEntity['heldPowerup'] }) {

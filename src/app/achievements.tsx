@@ -24,7 +24,7 @@ interface ProfileRankingRowProps {
   fgMuted: string
 }
 
-// One row per saved profile — a ProfileChip (that profile's own saved color and tag) plus its name
+// One row per saved profile - a ProfileChip (that profile's own saved color and tag) plus its name
 // and versus record. Stays Snake-local: @tastic/hud's StatRow has no notion of a leading identity
 // chip, matching how LightCycles/BoxHockey/AirHockey/Pong each keep their own version of this.
 function ProfileRankingRow({ ranking, fg, fgMuted }: ProfileRankingRowProps) {
@@ -46,7 +46,7 @@ function ProfileRankingRow({ ranking, fg, fgMuted }: ProfileRankingRowProps) {
 }
 
 export default function AchievementsScreen() {
-  // Unlike index.tsx, this screen previously had no orientation handling at all — it always
+  // Unlike index.tsx, this screen previously had no orientation handling at all - it always
   // rendered right-side-up regardless of how the phone was actually being held. rotateInsets
   // remaps the device's own raw (never-rotated) safe-area reading onto whichever edge it actually
   // corresponds to once FakeLandscapeView below visually rotates the content.
@@ -61,11 +61,11 @@ export default function AchievementsScreen() {
   const fg = dark ? '#FFFFFF' : '#000000'
 
   // null = "All Profiles" (device-wide). Self-heals to null if the selected profile is deleted
-  // from another still-mounted screen — effectiveProfileId stops matching any entry in `profiles`.
+  // from another still-mounted screen - effectiveProfileId stops matching any entry in `profiles`.
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const effectiveProfileId = selectedProfileId && profiles.some((p) => p.id === selectedProfileId) ? selectedProfileId : null
   const profileBucket = effectiveProfileId ? (stats.profiles[effectiveProfileId] ?? DEFAULT_PROFILE_STATS) : null
-  // The same StatsState-shaped object every predicate and helper already reads — statsView === stats
+  // The same StatsState-shaped object every predicate and helper already reads - statsView === stats
   // for "All Profiles", so every section collapses to the device-wide view in that case.
   const statsView = profileBucket ? getProfileStatsView(profileBucket) : stats
   const rankings = useMemo(() => getProfileRankings(profiles, stats.profiles), [profiles, stats.profiles])
@@ -97,7 +97,7 @@ export default function AchievementsScreen() {
         ))}
 
         {/* A leaderboard across profiles is inherently a cross-profile question, so it only appears
-      on "All Profiles" — once you've drilled into one profile it answers a different question. */}
+      on "All Profiles" - once you've drilled into one profile it answers a different question. */}
         {effectiveProfileId === null && rankings.length > 0 && (
           <StatSection label='PLAYER RANKINGS'>
             {rankings.map((ranking) => (

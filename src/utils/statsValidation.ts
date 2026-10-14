@@ -9,11 +9,11 @@ export const CPU_DIFFICULTIES: CpuDifficulty[] = ['easy', 'normal', 'hard']
 
 const DEFAULT_MODE_STATS: SnakeModeStats = { played: 0, bestScore: 0, totalScore: 0 }
 
-// One factory per nested field, each called independently everywhere a default is needed —
+// One factory per nested field, each called independently everywhere a default is needed -
 // DEFAULT_PROFILE_STATS and DEFAULT_STATS below each need their own independent objects, not two
 // references to the same one. Every consumer today only ever spreads/reads these, but a shared
 // reference is a standing invitation for a future in-place mutation (or, previously here, a bare
-// `versus: DEFAULT_OUTCOME_RECORD` with no clone at all) to corrupt both at once — mirrors
+// `versus: DEFAULT_OUTCOME_RECORD` with no clone at all) to corrupt both at once - mirrors
 // LightCycles' own statsValidation.ts createDefaultVsCpu/createDefaultTwoPlayer pattern.
 function createDefaultByMode(): Record<SnakeMode, SnakeModeStats> {
   return Object.fromEntries(SNAKE_MODES.map((m) => [m, { ...DEFAULT_MODE_STATS }])) as Record<SnakeMode, SnakeModeStats>
@@ -41,7 +41,7 @@ export const DEFAULT_PROFILE_STATS: ProfileStats = {
 }
 
 // byMode/versus/versusStreak/byDifficulty are re-created here rather than spread straight from
-// DEFAULT_PROFILE_STATS, specifically so the two don't end up aliasing the same nested objects —
+// DEFAULT_PROFILE_STATS, specifically so the two don't end up aliasing the same nested objects -
 // see the factories' own doc above.
 export const DEFAULT_STATS: StatsState = {
   ...DEFAULT_PROFILE_STATS,

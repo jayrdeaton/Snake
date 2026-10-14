@@ -72,6 +72,13 @@ describe('unlocking', () => {
     expect(ids.has('beat_cpu_easy')).toBe(false)
   })
 
+  it('names each beat-the-CPU difficulty the way the CPU picker does, with the plain level in parentheses', () => {
+    const description = (id: string) => ACHIEVEMENT_CATALOG.find((a) => a.id === id)?.description
+    expect(description('beat_cpu_easy')).toBe('Beat the CPU on Garter (Easy) difficulty.')
+    expect(description('beat_cpu_normal')).toBe('Beat the CPU on Rattler (Normal) difficulty.')
+    expect(description('beat_cpu_hard')).toBe('Beat the CPU on King Cobra (Hard) difficulty.')
+  })
+
   it('never reports the device-scoped achievement for a profile', () => {
     const bucket = { ...DEFAULT_PROFILE_STATS, versus: { played: 1, wins: 1, losses: 0, draws: 0 } }
     const ids = evaluateUnlockedIdsForProfile(bucket)

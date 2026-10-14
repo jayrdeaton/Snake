@@ -1,4 +1,4 @@
-// CPU opponent for Snake — adapted from LightCycles' cpuAi.ts, keeping its flood-fill-scoring +
+// CPU opponent for Snake - adapted from LightCycles' cpuAi.ts, keeping its flood-fill-scoring +
 // tie-break-toward-straight + food-seeking-bias core. Originally dropped everything powerup/
 // held-item-related since Snake had no powerups; now that it does, this file grows the same
 // lookahead/powerup-awareness/mesmerize-compensation shape LightCycles' own cpuAi.ts already has.
@@ -21,26 +21,26 @@ export type CpuDifficulty = 'easy' | 'normal' | 'hard'
 // own tuning home instead of a cross-project shared constants module.
 export const CPU_FLOOD_FILL_CAP = 900
 
-// Difficulty degrades decision QUALITY only, never reaction speed — the CPU always ticks in step
+// Difficulty degrades decision QUALITY only, never reaction speed - the CPU always ticks in step
 // with everyone else; only how faithfully it follows its own best-scoring move varies. Same names
 // and values as LightCycles' own CPU_NORMAL_SUBOPTIMAL_CHANCE/CPU_EASY_RANDOM_CHANCE (see
 // constants/game.ts there), reused here rather than shared since this is a new, standalone file.
 //
 // CPU_NORMAL_SUBOPTIMAL_CHANCE is rolled independently every tick, so it compounds fast across a
-// whole round — kept low so 'normal' wobbles off the optimal line occasionally without reading as
+// whole round - kept low so 'normal' wobbles off the optimal line occasionally without reading as
 // self-destructive. 'easy' rolls far more often (CPU_EASY_RANDOM_CHANCE) and, when it hits, takes
 // any move that merely survives the next step rather than the best-scoring one.
 export const CPU_NORMAL_SUBOPTIMAL_CHANCE = 0.05
 export const CPU_EASY_RANDOM_CHANCE = 0.5
 
 // How close two directions' open-space scores must be (in cells) to let food-seeking break the tie
-// — mirrors LightCycles' CPU_POWERUP_AWARENESS[difficulty].seekTieToleranceCells, collapsed to one
+// - mirrors LightCycles' CPU_POWERUP_AWARENESS[difficulty].seekTieToleranceCells, collapsed to one
 // constant since food-seeking itself is unconditional/difficulty-independent (core to the genre,
-// not an optional flourish — see chooseCpuSnakeDirection's own comment). Pickup-seeking below has
+// not an optional flourish - see chooseCpuSnakeDirection's own comment). Pickup-seeking below has
 // its own, difficulty-gated tolerance in CPU_POWERUP_AWARENESS instead.
 export const CPU_FOOD_SEEK_TIE_TOLERANCE_CELLS = 20
 
-// CPU powerup-awareness knobs, one config per difficulty tier — layered onto the existing
+// CPU powerup-awareness knobs, one config per difficulty tier - layered onto the existing
 // flood-fill scoring the same way CPU_NORMAL_SUBOPTIMAL_CHANCE/CPU_EASY_RANDOM_CHANCE layer onto
 // its base direction choice: same algorithm, different faithfulness per tier, not a different
 // algorithm per tier. Mirrors LightCycles' CPU_POWERUP_AWARENESS exactly.
@@ -56,16 +56,16 @@ export const CPU_POWERUP_AWARENESS: Record<CpuDifficulty, CpuSnakePowerupAwarene
   normal: { seekPickups: true, seekTieToleranceCells: 20, defensiveCounters: true, opportunisticSelfUse: true, offensiveUse: true },
   hard: { seekPickups: true, seekTieToleranceCells: 40, defensiveCounters: true, opportunisticSelfUse: true, offensiveUse: true }
 }
-export const POWERUP_CPU_SIDEWIND_MIN_SPACE = 60 // "coast is clear" — floor for opportunistic Sidewind
+export const POWERUP_CPU_SIDEWIND_MIN_SPACE = 60 // "coast is clear" - floor for opportunistic Sidewind
 export const POWERUP_CPU_OFFENSIVE_SPACE_THRESHOLD = 15 // opponent's own space this low = most punishing moment to strike
 export const POWERUP_CPU_OFFENSIVE_FALLBACK_CHANCE = 0.02 // per-tick chance to use an offensive item anyway, so it doesn't hoard forever
 
-// Per-tick chance the CPU "notices" it's currently Mesmerized and steers to compensate — reasoning
+// Per-tick chance the CPU "notices" it's currently Mesmerized and steers to compensate - reasoning
 // about the true best direction as always (chooseCpuSnakeDirection never itself knows about the
 // inversion), then pre-inverting its own output so the automatic Mesmerize flip cancels out and the
 // correct direction still lands. Without this, a mesmerized CPU blindly applies the flip on top of
 // its own genuinely-best choice, which reliably steers it into a wall whenever the correct escape
-// happens to be lateral — a free kill, not an earned one. Mirrors LightCycles' identical
+// happens to be lateral - a free kill, not an earned one. Mirrors LightCycles' identical
 // CPU_HACK_COMPENSATION_CHANCE: 'hard' always compensates (decision quality, not reaction speed, is
 // what difficulty already models here), 'normal' sometimes still gets caught out, 'easy' never
 // adapts.
@@ -84,7 +84,7 @@ export interface ChooseCpuSnakeDirectionParams {
   difficulty: CpuDifficulty
   random?: () => number
   food: GridCell
-  // How many cells THIS snake itself advances this tick (see snakeEngine.ts's stepsForSnake) — a
+  // How many cells THIS snake itself advances this tick (see snakeEngine.ts's stepsForSnake) - a
   // boosted CPU needs its own safety lookahead to walk the same number of cells ahead, or a
   // direction that's only safe for 1 cell but crashes on the 2nd (while boosted) would misscore as
   // safe. Defaults to 1 (today's behavior) for every existing call site/test.
@@ -92,11 +92,11 @@ export interface ChooseCpuSnakeDirectionParams {
   // Powerup awareness, both optional/defaulted so existing call sites/tests are unaffected.
   pickups?: SnakePowerupPickup[]
   heldPowerup?: SnakePowerupType | null
-  // Portal/tunnel-aware pathing (see snakeEngine.ts's buildPortalLookup/buildTunnelCellSet) —
+  // Portal/tunnel-aware pathing (see snakeEngine.ts's buildPortalLookup/buildTunnelCellSet) -
   // optional/defaulted so existing call sites/tests (predating arenas) are unaffected.
   portals?: ReadonlyMap<string, GridCell>
   tunnelCellSet?: ReadonlySet<string>
-  // The round's true wrapEdges — optional/defaulted (false) so existing call sites/tests are
+  // The round's true wrapEdges - optional/defaulted (false) so existing call sites/tests are
   // unaffected. This is the ground truth, not a per-difficulty decision; whether it's actually
   // USED is gated to 'hard' further down (see this function's own wrapAware local).
   wrapEdges?: boolean
@@ -106,7 +106,7 @@ export interface ChooseCpuSnakeDirectionParams {
 // occupied for the next step's own check (mirroring snakeEngine.ts's tickSnake sub-step
 // semantics), then flood-fills from wherever that lands. Unsafe (space -1, cell null) if any of
 // those steps would be out of bounds or already occupied. A tunnel-member landing cell is never
-// itself a hazard (see types/index.ts's own SnakeTunnel comment — mirrored here by simply never
+// itself a hazard (see types/index.ts's own SnakeTunnel comment - mirrored here by simply never
 // adding a tunnel cell to `working`, so a later step through the same cell also reads it as clear),
 // matching tickSnake's own "tunnel cells never block" rule exactly.
 function candidateSnakeSafety(head: GridCell, direction: Direction, grid: GridSize, occupied: ReadonlySet<string>, ownSteps: number, cap: number, portals: ReadonlyMap<string, GridCell> = new Map(), tunnelCellSet: ReadonlySet<string> = new Set(), wrapEdges: boolean = false): { space: number; cell: GridCell | null } {
@@ -124,12 +124,12 @@ function candidateSnakeSafety(head: GridCell, direction: Direction, grid: GridSi
     if (i < steps - 1 && !isTunnelCell) working = new Set(working).add(landedKey)
   }
   // tunnelOccupied is always empty here (never passed) since a tunnel cell never blocks anyone in
-  // Snake's model — passing an always-empty set is what makes floodFill.ts's own isBlocked routing
+  // Snake's model - passing an always-empty set is what makes floodFill.ts's own isBlocked routing
   // agree with that (see this file's own header comment on why no tunnelOccupied builder exists).
   return { space: countReachableCells(cell, grid, working, cap, portals, tunnelCellSet, new Set(), wrapEdges), cell }
 }
 
-// True only when every legal (non-180°) direction is unsafe within the snake's own lookahead —
+// True only when every legal (non-180°) direction is unsafe within the snake's own lookahead -
 // used to decide when a held Scales is worth popping preemptively (see shouldCpuActivateSnakePowerup)
 // rather than accepting a move that's about to crash anyway.
 function isCornered(snake: SnakeEntity, grid: GridSize, occupied: ReadonlySet<string>, ownSteps: number, portals: ReadonlyMap<string, GridCell>, tunnelCellSet: ReadonlySet<string>, wrapEdges: boolean): boolean {
@@ -138,25 +138,25 @@ function isCornered(snake: SnakeEntity, grid: GridSize, occupied: ReadonlySet<st
   return candidates.every((direction) => candidateSnakeSafety(head, direction, grid, occupied, ownSteps, CPU_FLOOD_FILL_CAP, portals, tunnelCellSet, wrapEdges).space < 0)
 }
 
-// Scores each legal turn (i.e. not a 180° reversal — the same rule applySnakeTurnIntent enforces
+// Scores each legal turn (i.e. not a 180° reversal - the same rule applySnakeTurnIntent enforces
 // for human input) by how much open space it leads toward, via a flood fill from the resulting
 // cell. That's what keeps the CPU from boxing itself in the way a purely-greedy "avoid only the
-// very next cell" bot would — a direction whose first step is safe but only opens onto a small
+// very next cell" bot would - a direction whose first step is safe but only opens onto a small
 // pocket still scores low. Difficulty modulates how faithfully the CPU follows that score, not how
-// fast it reacts — 'hard' always takes the best-scoring move, 'normal'/'easy' sometimes settle for
+// fast it reacts - 'hard' always takes the best-scoring move, 'normal'/'easy' sometimes settle for
 // a worse one.
 //
-// Food-seeking is unconditional and difficulty-independent — core to the genre, not an optional
+// Food-seeking is unconditional and difficulty-independent - core to the genre, not an optional
 // flourish. Pickup-seeking (difficulty-gated via CPU_POWERUP_AWARENESS) unions in every live
 // pickup's cell as an additional target once seeking, so a single tie-break pass covers both
 // rather than two competing systems; like food-seeking, it can only ever break a tie among
-// directions that already score within tolerance of the best — it can never pull the CPU toward a
+// directions that already score within tolerance of the best - it can never pull the CPU toward a
 // target at the cost of a genuinely safer option.
 export function chooseCpuSnakeDirection({ snake, grid, occupied, difficulty, random = Math.random, food, ownSteps = 1, pickups = [], heldPowerup = null, portals = new Map(), tunnelCellSet = new Set(), wrapEdges = false }: ChooseCpuSnakeDirectionParams): Direction {
   const head = snake.body[snake.body.length - 1]
   const candidates = ALL_DIRECTIONS.filter((direction) => !isOppositeDirection(direction, snake.direction))
 
-  // Deliberately gated to 'hard' only, matching LightCycles' identical reasoning — easy/normal keep
+  // Deliberately gated to 'hard' only, matching LightCycles' identical reasoning - easy/normal keep
   // treating the edge as a wall even when it isn't, which reads as in-character weakness for those
   // tiers rather than an unfinished feature.
   const wrapAware = wrapEdges && difficulty === 'hard'
@@ -166,7 +166,7 @@ export function chooseCpuSnakeDirection({ snake, grid, occupied, difficulty, ran
   const maxSpace = scored[0].space
   const tiedForBest = scored.filter((s) => s.space === maxSpace)
   // Prefers continuing straight over an equally-good turn, purely so the CPU doesn't zigzag through
-  // symmetric open space for no reason — ties on open-space score are common early in a round,
+  // symmetric open space for no reason - ties on open-space score are common early in a round,
   // before anyone's body has carved up the grid yet.
   let best = (tiedForBest.find((s) => s.direction === snake.direction) ?? tiedForBest[0]).direction
 
@@ -197,7 +197,7 @@ export function chooseCpuSnakeDirection({ snake, grid, occupied, difficulty, ran
   }
 
   // 'easy': half the time, ignore the score entirely and take any move that at least survives
-  // this step — weak, but not so weak it feels broken by driving straight into a wall on purpose.
+  // this step - weak, but not so weak it feels broken by driving straight into a wall on purpose.
   const safeOptions = scored.filter((s) => s.space >= 0)
   if (safeOptions.length > 0 && random() < CPU_EASY_RANDOM_CHANCE) {
     const index = Math.min(safeOptions.length - 1, Math.floor(random() * safeOptions.length))
@@ -206,7 +206,7 @@ export function chooseCpuSnakeDirection({ snake, grid, occupied, difficulty, ran
   return best
 }
 
-// Whether the CPU "notices" it's currently Mesmerized and steers to compensate this tick —
+// Whether the CPU "notices" it's currently Mesmerized and steers to compensate this tick -
 // difficulty gates how often, not whether it's even capable of it. Chances of exactly 0 or 1 skip
 // the random() call entirely, so 'easy'/'hard' never consume an extra roll a test wouldn't expect.
 function shouldCompensateForMesmerize(difficulty: CpuDifficulty, random: () => number): boolean {
@@ -218,11 +218,11 @@ function shouldCompensateForMesmerize(difficulty: CpuDifficulty, random: () => n
 
 // Sole entry point a later hook (useSnakeState) calls each tick for the CPU-controlled snake:
 // computes its direction and queues it through the exact same choke point human input goes through
-// (applySnakeTurnIntent) — the CPU can't bypass turn-legality rules any more than a human can. A
+// (applySnakeTurnIntent) - the CPU can't bypass turn-legality rules any more than a human can. A
 // no-op (state passed through unchanged) when there's no such snake, it's already dead, or the
 // round isn't in progress.
 //
-// chooseCpuSnakeDirection always reasons about the true best direction, uninverted — it has no idea
+// chooseCpuSnakeDirection always reasons about the true best direction, uninverted - it has no idea
 // whether it's currently Mesmerized. Whether the CPU compensates is decided first (see
 // shouldCompensateForMesmerize): if it does, the flip is skipped entirely (the two inversions would
 // just cancel out); if it doesn't "notice," the flip lands exactly as it would against unaware
@@ -256,7 +256,7 @@ export function applyCpuSnakeTurn(state: SnakeGameState, cpuSnakeId: SnakeId, di
   return applySnakeTurnIntent(state, cpuSnakeId, direction)
 }
 
-// Decides whether the CPU should activate its held powerup this tick — a difficulty-gated
+// Decides whether the CPU should activate its held powerup this tick - a difficulty-gated
 // heuristic layer (see CPU_POWERUP_AWARENESS) on top of the same flood-fill space assessment
 // chooseCpuSnakeDirection already uses, not a separate lookahead system. Each branch reasons only
 // about its own held type; there's no "pick the best of several held items" question since the
@@ -270,7 +270,7 @@ export function shouldCpuActivateSnakePowerup(state: SnakeGameState, cpuSnakeId:
   const portals = buildPortalLookup(state.portals)
   const tunnelCellSet = buildTunnelCellSet(state.tunnels)
   const awareness = CPU_POWERUP_AWARENESS[difficulty]
-  // Same hard-only gate as chooseCpuSnakeDirection's own wrapAware — see that comment.
+  // Same hard-only gate as chooseCpuSnakeDirection's own wrapAware - see that comment.
   const wrapAware = state.wrapEdges && difficulty === 'hard'
   const cpuOwnSteps = stepsForSnake(cpu.effects)
 
@@ -294,7 +294,7 @@ export function shouldCpuActivateSnakePowerup(state: SnakeGameState, cpuSnakeId:
   return false
 }
 
-// Delegates to the exact same applySnakePowerupActivation a human's tap goes through —
+// Delegates to the exact same applySnakePowerupActivation a human's tap goes through -
 // CPU-awareness is purely a decision layer on top (see shouldCpuActivateSnakePowerup), mirroring
 // how applyCpuSnakeTurn above delegates to applySnakeTurnIntent.
 export function applyCpuSnakePowerupActivation(state: SnakeGameState, cpuSnakeId: SnakeId, difficulty: CpuDifficulty, random: () => number = Math.random): SnakeGameState {

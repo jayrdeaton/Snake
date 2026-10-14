@@ -1,26 +1,29 @@
 import { AchievementTier, tieredFamily } from '@tastic/achievements'
 
+import { SNAKE_CPU_DIFFICULTY_NAMES } from '@/constants/snake'
 import { AchievementDefinition, StatsState } from '@/types'
 import { CpuDifficulty } from '@/utils/snakeAi'
 import { getBestScoreAnyMode, getModesPlayed, getTotalPlayed, getTotalScore } from '@/utils/statsEngine'
 
 export { ACHIEVEMENT_TIER_COLORS } from '@tastic/achievements'
 
-// Solo, Vs CPU and 2 Player — hardcoded rather than imported so this stays a dependency-light,
+// Solo, Vs CPU and 2 Player - hardcoded rather than imported so this stays a dependency-light,
 // Jest-safe constants file.
 const TOTAL_MODES = 3
 
 const CPU_DIFFICULTY_TIER: Record<CpuDifficulty, AchievementTier> = { easy: 'bronze', normal: 'silver', hard: 'gold' }
-const CPU_DIFFICULTY_LABEL: Record<CpuDifficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' }
+// Shown as the picker's own name with the plain difficulty in parentheses, e.g. "Garter (Easy)".
+const CPU_DIFFICULTY_PLAIN_LABEL: Record<CpuDifficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' }
+const cpuDifficultyLabel = (difficulty: CpuDifficulty): string => `${SNAKE_CPU_DIFFICULTY_NAMES[difficulty]} (${CPU_DIFFICULTY_PLAIN_LABEL[difficulty]})`
 
-// Three different predicates, not one value against three thresholds — hand-written, with no
-// `progress`, since a fraction of "beat Hard once" isn't meaningful.
+// Three different predicates, not one value against three thresholds - hand-written, with no
+// `progress`, since a fraction of "beat King Cobra once" isn't meaningful.
 function beatCpuFamily(): AchievementDefinition[] {
   const titles: Record<CpuDifficulty, string> = { easy: 'Out-Slithered', normal: 'Worthy Opponent', hard: 'Apex Predator' }
   return (['easy', 'normal', 'hard'] as CpuDifficulty[]).map((difficulty) => ({
     id: `beat_cpu_${difficulty}`,
     title: titles[difficulty],
-    description: `Beat the CPU on ${CPU_DIFFICULTY_LABEL[difficulty]} difficulty.`,
+    description: `Beat the CPU on ${cpuDifficultyLabel(difficulty)} difficulty.`,
     tier: CPU_DIFFICULTY_TIER[difficulty],
     icon: 'robot',
     isUnlocked: (stats: StatsState) => stats.byDifficulty[difficulty].wins >= 1
@@ -29,7 +32,7 @@ function beatCpuFamily(): AchievementDefinition[] {
 
 export const ACHIEVEMENT_CATALOG: AchievementDefinition[] = [
   { id: 'first_game_played', title: 'First Slither', description: 'Play your first round.', tier: 'bronze', icon: 'flag-checkered', isUnlocked: (stats) => getTotalPlayed(stats) >= 1 },
-  { id: 'first_ever_win', title: 'First Victory', description: 'Beat another snake — CPU or human.', tier: 'bronze', icon: 'star', isUnlocked: (stats) => stats.versus.wins >= 1 },
+  { id: 'first_ever_win', title: 'First Victory', description: 'Beat another snake (CPU or human).', tier: 'bronze', icon: 'star', isUnlocked: (stats) => stats.versus.wins >= 1 },
   {
     id: 'flawless_debut',
     title: "Beginner's Luck",

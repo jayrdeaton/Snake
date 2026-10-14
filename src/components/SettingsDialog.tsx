@@ -25,14 +25,14 @@ export interface SettingsDialogProps {
 // flags (both in Settings, read and written through useSettings()) plug straight into the shared
 // props. Everything else (sound, haptics, appearance, update checking) is identical across every
 // app using BaseSettingsDialog and lives
-// entirely inside that package now — this dialog no longer has any app-specific children of its
+// entirely inside that package now - this dialog no longer has any app-specific children of its
 // own: Wrap Edges moved to loadout.tsx's own LoadoutSharedControls row, and the CPU-difficulty
 // picker that used to duplicate it here moved to a per-seat picker on the same screen, matching
 // BoxHockey's/AirHockey's/LightCycles' identical cross-app convention of keeping per-round board
 // options out of the Settings dialog entirely. Keeps this file's own external props unchanged aside from the
 // rotation addition below (mirroring LightCycles' own SettingsDialog exactly), so none of its three
 // call sites (index.tsx, loadout.tsx, game.tsx) needed to change shape beyond threading rotation
-// through — this dialog renders as a centered Portal modal with no per-player zone of its own (see
+// through - this dialog renders as a centered Portal modal with no per-player zone of its own (see
 // the prop's own comment above), so the far seat in a rotating match now sees it rotated to match
 // instead of always upright relative to the device's fixed physical frame.
 export function SettingsDialog({ visible, onDismiss, rotation = 0, showHowToPlay = false }: SettingsDialogProps) {

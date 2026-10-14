@@ -11,12 +11,12 @@ jest.mock('expo-router', () => ({
   Stack: Object.assign((props: any) => props.children, { Screen: () => null })
 }))
 
-// Providers itself is stripped down to just a real ReduxProvider — this suite is testing
+// Providers itself is stripped down to just a real ReduxProvider - this suite is testing
 // RootLayout's own structure (SplashScreen calls, mounting UpdateDialog, the orientation lock
 // wiring), not Providers' internals (see components/Providers.test.tsx for that). A real Provider
 // is needed here now that ProfilesProvider (a RootLayout descendant, but outside Providers itself)
 // reads/dispatches Redux
-// state via useSelector/useDispatch — the real `store` is fine to use as-is: no native module is
+// state via useSelector/useDispatch - the real `store` is fine to use as-is: no native module is
 // available under Jest, so ProfilesProvider's own shared-store reconciliation resolves against its
 // empty local fallback, not any real I/O.
 jest.mock('../../components/Providers', () => {

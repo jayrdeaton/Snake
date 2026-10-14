@@ -19,9 +19,9 @@ export interface ResolveTurnIntentParams {
 // route through. Snake, unlike LightCycles, has exactly one shared, unrotated board and never puts
 // a second seat's view of it through any flip: there's only one physical coordinate space, ever,
 // for every mode (solo, vs CPU, 2 player) and every snake. LightCycles' own version of this
-// function reaches the same conclusion for its face-to-face far player — a raw swipe direction and
+// function reaches the same conclusion for its face-to-face far player - a raw swipe direction and
 // the raw direction the game piece should move are the same physical event, because the board
-// itself is never rotated per seat — but keeps player/orientationMode in its signature regardless,
+// itself is never rotated per seat - but keeps player/orientationMode in its signature regardless,
 // for a hypothetical future accommodation. Snake drops both outright: there is exactly one shared
 // unrotated coordinate space here, no per-player flip is ever needed, and the board is never
 // rotated, full stop. Also marked 'worklet' (via resolveSwipeDirection) so native's UI-thread

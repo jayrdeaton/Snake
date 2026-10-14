@@ -1,4 +1,4 @@
-// The home screen's animated "SNAKE" wordmark — letters stagger in (via @tastic/hud's shared
+// The home screen's animated "SNAKE" wordmark - letters stagger in (via @tastic/hud's shared
 // StaggeredWord, ported from LightCycles' AnimatedHeroTitle.tsx), then a forever-looping snake
 // (HeroSnakeTrail) fades in once they've mostly settled. See HeroSnakeTrailCanvas.tsx for the loop
 // itself.
@@ -14,7 +14,7 @@ import { HeroSnakeTrail } from './HeroSnakeTrail'
 const WORD = 'SNAKE'
 
 // The loop starts looping the instant it mounts (see HeroSnakeTrail) but stays hidden behind this
-// shared fade until the letters are most of the way settled — one "power on" beat once the
+// shared fade until the letters are most of the way settled - one "power on" beat once the
 // wordmark has mostly landed, rather than motion competing with letters still flying in. Same
 // formula/proportions as LightCycles' AnimatedHeroTitle.tsx.
 const TOTAL_STAGGER_MS = getStaggeredWordDuration(WORD.length)
@@ -22,7 +22,7 @@ const TRAIL_FADE_DELAY_MS = Math.round(TOTAL_STAGGER_MS * 0.7)
 const TRAIL_FADE_DURATION_MS = 280
 
 export interface HeroTitleProps {
-  // The letters themselves — the screen's own high-contrast fg color.
+  // The letters themselves - the screen's own high-contrast fg color.
   letterColor: string
 }
 

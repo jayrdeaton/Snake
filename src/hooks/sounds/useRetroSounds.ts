@@ -1,6 +1,6 @@
 import { useAudioPool } from '@rific/feedback-press/audio'
 
-// Relative, not the @/ alias — see useDefaultSounds.ts's own comment on why static asset
+// Relative, not the @/ alias - see useDefaultSounds.ts's own comment on why static asset
 // requires in this codebase stick to plain relative paths.
 const RETRO_BLIP_SOUND = require('../../../assets/sounds/retroBlip.wav')
 const RETRO_TICK_SOUND = require('../../../assets/sounds/retroTick.wav')

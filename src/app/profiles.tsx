@@ -5,17 +5,17 @@ import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
 import { safeBack } from '@/utils/navigation'
 
-// A real routed screen — reachable only from seat 1's dropdown (see ProfilePicker's own doc for
+// A real routed screen - reachable only from seat 1's dropdown (see ProfilePicker's own doc for
 // why seat 2 can't host this: its zone is 180°-rotated in face-to-face mode, and the OS keyboard
 // doesn't rotate with it). Reads useProfiles() directly rather than taking it as props from
-// loadout.tsx — there's nothing left for that screen to thread through once this is its own
-// destination. Mirrors Pong's/AirHockey's identically-shaped app/profiles.tsx — createProfile here
+// loadout.tsx - there's nothing left for that screen to thread through once this is its own
+// destination. Mirrors Pong's/AirHockey's identically-shaped app/profiles.tsx - createProfile here
 // takes just {name, color, tag}, since Snake's Profile is the package's own base type, unmodified.
 // The container View, theme-derived bg/fg, back button, and commit-pending-edit-before-navigate
 // composition all now live inside @tastic/profile's own ProfilesScreen.
 export default function Profiles() {
   const { profiles, createProfile, updateProfile, deleteProfile } = useProfiles()
-  // Only for wiring onDelete below — nothing else on this screen touches stats directly. Matches
+  // Only for wiring onDelete below - nothing else on this screen touches stats directly. Matches
   // LightCycles' identical onDelete wiring in its own app/profiles.tsx.
   const { removeProfileStats } = useGameStats()
 

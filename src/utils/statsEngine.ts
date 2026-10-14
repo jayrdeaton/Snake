@@ -59,7 +59,7 @@ function bumpBucket(prev: ProfileStats, mode: SnakeMode, seat: SeatRoundOutcome,
   }
 }
 
-// `now` defaults to the real clock — overridable so tests can drive day boundaries directly.
+// `now` defaults to the real clock - overridable so tests can drive day boundaries directly.
 export function applyRoundOutcome(prev: StatsState, outcome: RoundOutcome, context: RoundContext, now: Date = new Date()): StatsState {
   const deviceResult = seatResult(outcome, 1)
   const isFirstEver = getTotalPlayed(prev) === 0
@@ -98,7 +98,7 @@ export function getTotalScore(stats: ProfileStats): number {
   return SNAKE_MODES.reduce((sum, mode) => sum + stats.byMode[mode].totalScore, 0)
 }
 
-// How many of the three modes have been played at least once — the "try everything" family.
+// How many of the three modes have been played at least once - the "try everything" family.
 export function getModesPlayed(stats: ProfileStats): number {
   return SNAKE_MODES.filter((mode) => stats.byMode[mode].played > 0).length
 }
@@ -121,7 +121,7 @@ export interface ProfileRanking {
   winRate: number
 }
 
-// Sorted by versus wins, then win rate, both descending — the same ordering the other @tastic
+// Sorted by versus wins, then win rate, both descending - the same ordering the other @tastic
 // arcade games use, so the section reads the same way everywhere. Solo rounds count toward
 // `played` and `bestScore` but never toward wins/losses (see the versus record's own comment), so
 // a solo-only profile still appears here rather than being invisible.

@@ -70,9 +70,9 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
   const cardBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
   const fg = dark ? '#FFFFFF' : '#000000'
   const fgMuted = dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'
-  // Home deliberately avoids colors.primary — Retry already renders in that color as the easier-
+  // Home deliberately avoids colors.primary - Retry already renders in that color as the easier-
   // reach action (see button ordering below, same rationale as RoundOverDialog's own Quit/Rematch
-  // pair) — a neutral gray reads as clearly secondary regardless of theme.
+  // pair) - a neutral gray reads as clearly secondary regardless of theme.
   const homeBg = dark ? '#2A2A2A' : '#E0E0E0'
   const homeFg = dark ? '#FFFFFF' : '#000000'
 
@@ -212,7 +212,7 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
         {achievementUnlocks && achievementOwners && <AchievementUnlockList unlocks={achievementUnlocks} seats={SEATS} owners={achievementOwners} tierColors={ACHIEVEMENT_TIER_COLORS} fg={fg} style={styles.achievementList} />}
 
         {/* Home listed before Retry: both buttons render bottom-most in the card, so the LAST one
-        authored lands nearest a thumb reaching up from the bottom of the screen — same ordering
+        authored lands nearest a thumb reaching up from the bottom of the screen - same ordering
         rationale as RoundOverDialog's own Quit-before-Rematch pair. */}
         <Button mode='contained' onPress={onHome} style={styles.button} buttonColor={homeBg} textColor={homeFg}>
           Quit
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     gap: 32
   },
   // displaySmall/headlineLarge's own line-height leaves slack under the glyphs that the card's flex
-  // `gap` stacks on top of — clawed back the same way RoundOverDialog's own overlayTitle does.
+  // `gap` stacks on top of - clawed back the same way RoundOverDialog's own overlayTitle does.
   soloScore: { fontWeight: 'bold', marginTop: -8 },
   title: { fontWeight: 'bold', marginBottom: -8 },
   // The per-seat split below matches RoundOverDialog's zone/zoneCard/zoneButton styles. A seat's

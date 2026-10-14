@@ -13,7 +13,7 @@ import { useDispatch, useSelector } from 'react-redux'
 
 import { LOADOUT_SHARED_CONTROLS_IDS, LoadoutSharedControls } from '@/components/LoadoutSharedControls'
 import { SettingsDialog } from '@/components/SettingsDialog'
-import { SNAKE_POWERUP_ALL_TYPES, SNAKE_POWERUP_ICONS } from '@/constants/snake'
+import { SNAKE_CPU_DIFFICULTY_NAMES, SNAKE_POWERUP_ALL_TYPES, SNAKE_POWERUP_ICONS } from '@/constants/snake'
 import { useProfiles } from '@/hooks/useProfiles'
 import { useSettings } from '@/hooks/useSettings'
 import { SnakeMode } from '@/hooks/useSnakeState'
@@ -29,7 +29,7 @@ import { CpuDifficulty } from '@/utils/snakeAi'
 // own constant of the same name/value).
 const PANEL_SWAP_FADE_MS = 180
 
-// 'none' is a Snake-specific extension beyond a plain CpuDifficulty — this seat's own "no CPU at
+// 'none' is a Snake-specific extension beyond a plain CpuDifficulty - this seat's own "no CPU at
 // all" choice (see the 1-Player flow below), never persisted as a difficulty preference. Was
 // previously declared in the now-removed local PlayerSetupPanel.tsx (moved to @tastic/hud); lives
 // here now since this is its only remaining call site.
@@ -38,20 +38,20 @@ type CpuDifficultyChoice = CpuDifficulty | 'none'
 // Snake-flavored escalation instead of a plain skill-level label, matching LightCycles' own
 // Drone/Bot/MCP convention but in reptile language rather than Tron's: "Garter" (a real, famously
 // harmless beginner snake), "Rattler" (a genuine pit-viper threat), "King Cobra" (the world's
-// longest venomous snake — the apex/final-boss tier, and "King" signals that status the same way
+// longest venomous snake - the apex/final-boss tier, and "King" signals that status the same way
 // MCP's own name does). The underlying CpuDifficulty value stays plain 'easy'/'normal'/'hard'
-// throughout the engine/AI/stats — same split LightCycles itself uses, where Drone/Bot/MCP are
+// throughout the engine/AI/stats - same split LightCycles itself uses, where Drone/Bot/MCP are
 // display labels only and never touch the real difficulty value.
-// Plus a 4th "None" choice LightCycles has no equivalent of — Snake's 1-Player flow folds its
+// Plus a 4th "None" choice LightCycles has no equivalent of - Snake's 1-Player flow folds its
 // genuine no-opponent Solo mode in here alongside a real CPU difficulty (see finalMode below).
 const CPU_DIFFICULTY_OPTIONS: LabeledDropdownOption<CpuDifficultyChoice>[] = [
   { value: 'none', label: 'None', icon: 'close-circle-outline' },
-  { value: 'easy', label: 'Garter', icon: 'emoticon-happy-outline' },
-  { value: 'normal', label: 'Rattler', icon: 'robot' },
-  { value: 'hard', label: 'King Cobra', icon: 'fire' }
+  { value: 'easy', label: SNAKE_CPU_DIFFICULTY_NAMES.easy, icon: 'emoticon-happy-outline' },
+  { value: 'normal', label: SNAKE_CPU_DIFFICULTY_NAMES.normal, icon: 'robot' },
+  { value: 'hard', label: SNAKE_CPU_DIFFICULTY_NAMES.hard, icon: 'fire' }
 ]
 
-// Left icon-less, mirroring LightCycles' own KEY_SCHEME_OPTIONS (LobbyPlayerPanel.tsx) exactly —
+// Left icon-less, mirroring LightCycles' own KEY_SCHEME_OPTIONS (LobbyPlayerPanel.tsx) exactly -
 // there's no MaterialCommunityIcons glyph that reads as "WASD" or "IJKL" at a glance the way
 // CPU_DIFFICULTY_OPTIONS' icons do for a difficulty, so mixing one iconned option (Mouse) in with
 // four icon-less ones would look like an inconsistency rather than a real distinction.
@@ -64,14 +64,14 @@ const CONTROL_SCHEME_OPTIONS: MenuOption<ControlScheme>[] = [
 ]
 
 // Same "bundled multi-select, not two boolean-shaped single-selects" technique LightCycles' own
-// EXTEND_SAFE_AREA_OPTION/WRAP_EDGES_OPTION use — presence in the section's own value array is each
+// EXTEND_SAFE_AREA_OPTION/WRAP_EDGES_OPTION use - presence in the section's own value array is each
 // toggle's on/off state, converted to/from a plain boolean at LoadoutSharedControls' own prop
 // boundary. Icons match that same cross-app convention for each of these two exact settings:
 // Pac-Man's own glyph for screen wrap, the expand-arrows glyph LightCycles' "Full Screen" uses.
 const FULL_SCREEN_OPTION: MenuOption<'fullScreen'> = { value: 'fullScreen', label: 'Full Screen', icon: 'arrow-expand-all' }
 const WRAP_EDGES_OPTION: MenuOption<'wrapEdges'> = { value: 'wrapEdges', label: 'Wrap Edges', icon: 'pac-man' }
 
-// Static board layout — mirrors LightCycles' own arena picker (see utils/arenas.ts for what each
+// Static board layout - mirrors LightCycles' own arena picker (see utils/arenas.ts for what each
 // variant actually builds).
 const ARENA_OPTIONS: MenuOption<SnakeArenaVariant>[] = [
   { value: 'open', label: 'Open', icon: 'checkbox-blank-outline' },
@@ -81,10 +81,10 @@ const ARENA_OPTIONS: MenuOption<SnakeArenaVariant>[] = [
   { value: 'underpass', label: 'Underpass', icon: 'tunnel-outline' }
 ]
 
-// Per-round cell size — mirrors LightCycles' own grid-size picker (see constants/snake.ts's
+// Per-round cell size - mirrors LightCycles' own grid-size picker (see constants/snake.ts's
 // SNAKE_CELL_PX). Plain Small/Medium/Large labels rather than a themed relabel (unlike LightCycles'
 // own motorbike/car/train icons, or this screen's own Garter/Rattler/King Cobra difficulty labels
-// above) — a growing-dot icon progression already reads as "size" at a glance, so there's no need
+// above) - a growing-dot icon progression already reads as "size" at a glance, so there's no need
 // to invent a snake-specific metaphor just for this one setting.
 const GRID_SIZE_OPTIONS: MenuOption<SnakeGridSizeTier>[] = [
   { value: 'small', label: 'Small', icon: 'circle-small' },
@@ -92,7 +92,7 @@ const GRID_SIZE_OPTIONS: MenuOption<SnakeGridSizeTier>[] = [
   { value: 'large', label: 'Large', icon: 'circle' }
 ]
 
-// Per-round tick speed — mirrors LightCycles' own speed picker (see constants/snake.ts's
+// Per-round tick speed - mirrors LightCycles' own speed picker (see constants/snake.ts's
 // SNAKE_SPEED_TIER_INTERVAL_MS).
 const SPEED_OPTIONS: MenuOption<SnakeSpeedTier>[] = [
   { value: 'slow', label: 'Slow', icon: 'speedometer-slow' },
@@ -105,15 +105,15 @@ const SPEED_OPTIONS: MenuOption<SnakeSpeedTier>[] = [
 const POWERUP_LABELS: Record<SnakePowerupType, string> = { sidewind: 'Sidewind', coldblood: 'Coldblood', scales: 'Scales', constrict: 'Constrict', mesmerize: 'Mesmerize', frenzy: 'Frenzy' }
 const POWERUP_OPTIONS: MenuOption<SnakePowerupType>[] = SNAKE_POWERUP_ALL_TYPES.map((type) => ({ value: type, label: POWERUP_LABELS[type], icon: SNAKE_POWERUP_ICONS[type] }))
 
-// Reached for 1 Player/2 Player (see index.tsx). Mirrors AirHockey's/BoxHockey's loadout.tsx —
+// Reached for 1 Player/2 Player (see index.tsx). Mirrors AirHockey's/BoxHockey's loadout.tsx -
 // trimmed down further: LoadoutSharedControls has just the one board dropdown (wrapEdges +
 // fullScreen, Snake's only two board options). CPU difficulty and (web-only) control scheme each
 // live in this screen's own per-seat pickers below
-// per-seat pickers below (PlayerSetupPanel), not the shared row — same cross-app convention
+// per-seat pickers below (PlayerSetupPanel), not the shared row - same cross-app convention
 // BoxHockey's/AirHockey's/LightCycles' own per-seat pickers use. Reuses @tastic/split-screen's
-// FakeLandscapeView (@tastic/core's own useOrientationState feeds it) — Snake's own version of
+// FakeLandscapeView (@tastic/core's own useOrientationState feeds it) - Snake's own version of
 // that package, like BoxHockey's, fakes the rotation in JS since app.json is portrait-locked at
-// the OS level — unlike AirHockey's older split-screen version, which still relies on real OS
+// the OS level - unlike AirHockey's older split-screen version, which still relies on real OS
 // rotation).
 export default function LoadoutScreen() {
   const params = useLocalSearchParams<{ mode: string }>()
@@ -133,7 +133,7 @@ export default function LoadoutScreen() {
   const dispatch = useDispatch<AppDispatch>()
   const lastGuestColor = useSelector((state: RootState) => state.seatColors.lastGuestColor)
   const lastCpuColor = useSelector((state: RootState) => state.seatColors.lastCpuColor)
-  // A manual recolor/clash-swap landing on a seat that currently has a profile selected — see
+  // A manual recolor/clash-swap landing on a seat that currently has a profile selected - see
   // @tastic/profile's createSeatColorsSlice doc on profileOverride. Persisted (survives navigation and relaunch),
   // only cleared when that seat's own selection genuinely changes (handleP1ProfileSelect/
   // handleP2ProfileSelect below), never by merely leaving and returning to this screen.
@@ -149,19 +149,19 @@ export default function LoadoutScreen() {
   const gridSizeTier = settings.gridSizeTier
   const speedTier = settings.speedTier
   const enabledPowerups = settings.enabledPowerups
-  // Web-only per-seat picker (see PlayerSetupPanel's showControlScheme) — Record<SnakeId,...>
+  // Web-only per-seat picker (see PlayerSetupPanel's showControlScheme) - Record<SnakeId,...>
   // rather than tied to a Profile, since Snake's Profile is the shared @tastic/profile package's
   // own type as-is (see useProfiles.tsx's own comment) and isn't extended with app-specific fields
   // the way LightCycles' local Profile.keyScheme is.
   const controlScheme = settings.controlScheme
 
-  // Seat 2 only ever has a profile in 2 Player — 1 Player's seat 2 is the CPU (or nothing at all,
+  // Seat 2 only ever has a profile in 2 Player - 1 Player's seat 2 is the CPU (or nothing at all,
   // once "None" is picked), which has no profile concept either way (see PlayerSetupPanel's own
   // profiles={p2IsHuman ? profiles : undefined}).
   const p1Profile = useMemo(() => profiles.find((p) => p.id === lastSelected[1]) ?? null, [profiles, lastSelected])
   const p2Profile = useMemo(() => (p2IsHuman ? (profiles.find((p) => p.id === lastSelected[2]) ?? null) : null), [profiles, p2IsHuman, lastSelected])
 
-  // Per-round only — these never need to persist past this screen; /game reads them once via route
+  // Per-round only - these never need to persist past this screen; /game reads them once via route
   // params (see game.tsx) and falls back to createInitialSnakeState's own SNAKE_COLORS defaults for
   // every other call site. Seeded here from whichever source currently owns the seat's color
   // (profile, honoring any active override, > last guest color, or last CPU color for 1 Player's
@@ -170,9 +170,9 @@ export default function LoadoutScreen() {
   const [p1Color, setP1Color] = useState(() => (p1Profile ? (profileOverride[1] ?? p1Profile.color) : lastGuestColor[1]))
   const [p2Color, setP2Color] = useState(() => (p2IsHuman ? (p2Profile ? (profileOverride[2] ?? p2Profile.color) : lastGuestColor[2]) : lastCpuColor))
 
-  // 1 Player's own CPU-seat choice — Easy/Normal/Hard/None (see CPU_DIFFICULTY_OPTIONS). Seeded
+  // 1 Player's own CPU-seat choice - Easy/Normal/Hard/None (see CPU_DIFFICULTY_OPTIONS). Seeded
   // from (and, on every focus, reset back to) the persisted preference, same convention as
-  // p1Color/p2Color just above — except "None" itself is never persisted (see handleDifficultyChange),
+  // p1Color/p2Color just above - except "None" itself is never persisted (see handleDifficultyChange),
   // so a "None" pick from an earlier visit never survives a trip away and back, only a real
   // difficulty does. persistedCpuDifficulty is null until a real difficulty has ever been picked
   // (see types/index.ts's Settings cpuDifficulty comment), which folds into this same "no CPU" state.
@@ -180,11 +180,11 @@ export default function LoadoutScreen() {
 
   // (a) A seat with a profile selected shows that profile's own color, unless a manual recolor/
   // clash-swap has landed an override on it (see @tastic/profile's createSeatColorsSlice doc on profileOverride)
-  // — in which case the override wins instead. Refires on every focus (first mount, and coming back
+  // - in which case the override wins instead. Refires on every focus (first mount, and coming back
   // to an already-mounted /loadout via the post-game "Loadout" button), so a profile edited
   // elsewhere via /profiles is picked up the instant you're back, and whenever a seat's own selected
   // profile id changes (a fresh tap-select, or switching to/from guest). Deliberately NOT keyed on
-  // the profile records, the guest/CPU slots, or profileOverride itself — an edit to a profile
+  // the profile records, the guest/CPU slots, or profileOverride itself - an edit to a profile
   // elsewhere while the same one stays selected here, or this screen's own writes to those slots
   // below, must not bounce this back. Those five are instead read through refs, each kept in sync by
   // its own trivial effect below, so the callback still sees their CURRENT values on a real refire
@@ -220,7 +220,7 @@ export default function LoadoutScreen() {
       setP1Color(p1ProfileRef.current ? (override[1] ?? p1ProfileRef.current.color) : lastGuestColorRef.current[1])
       setP2Color(p2IsHuman ? (p2ProfileRef.current ? (override[2] ?? p2ProfileRef.current.color) : lastGuestColorRef.current[2]) : lastCpuColorRef.current)
       setDifficulty(persistedCpuDifficultyRef.current ?? 'none')
-      // lastSelected is intentionally a trigger-only dependency here — a fresh tap-select or
+      // lastSelected is intentionally a trigger-only dependency here - a fresh tap-select or
       // guest/profile switch must reapply the seat's color, even though the callback body reads the
       // resolved profile/color through the refs above rather than lastSelected itself.
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -239,7 +239,7 @@ export default function LoadoutScreen() {
     [setSettings]
   )
 
-  // (b)/(c): a profile-selected seat's own recolor now persists too — as that seat's override (see
+  // (b)/(c): a profile-selected seat's own recolor now persists too - as that seat's override (see
   // @tastic/profile's createSeatColorsSlice doc on profileOverride) rather than being silently dropped, so it
   // survives leaving and returning to /loadout (or a relaunch) the same way a guest's or the CPU's
   // own remembered color already did. A guest and 1 Player's CPU seat 2 still each get their own
@@ -270,13 +270,13 @@ export default function LoadoutScreen() {
     [p2IsHuman, p2Profile, dispatch]
   )
 
-  // Whether a second colored entity actually exists right now — a real human (2 Player) or a real
+  // Whether a second colored entity actually exists right now - a real human (2 Player) or a real
   // CPU difficulty (1 Player, anything but None). When it's false (1 Player's "None" seat), p2Color
   // is just a stale leftover (lastCpuColor) for a seat the user can no longer even see or edit, so
   // it must never factor into P1's own color logic below.
   const p2Exists = p2IsHuman || difficulty !== 'none'
 
-  // Picking the other slot's exact current color swaps the two instead of no-op'ing — only
+  // Picking the other slot's exact current color swaps the two instead of no-op'ing - only
   // reachable at all when that slot's own picker allowed it (allowSwapTaken: 1 Player only, where
   // the "other" color there is only ever the CPU's, not a second real person's choice). Each side of
   // a swap persists independently, per its own seat's rule above.
@@ -305,7 +305,7 @@ export default function LoadoutScreen() {
 
   // Clears this seat's own persisted override before the new selection takes over, so a manual
   // recolor/clash-swap made under the previous profile (or as a guest) can't leak into whichever
-  // profile just got picked — see @tastic/profile's createSeatColorsSlice doc on profileOverride. selectProfile
+  // profile just got picked - see @tastic/profile's createSeatColorsSlice doc on profileOverride. selectProfile
   // itself only updates lastSelected; the color-sync effect/focus-effect above pick up this seat's
   // freshly-selected profile's own color once profileOverride[seat] has already been cleared here.
   const handleP1ProfileSelect = useCallback(
@@ -323,18 +323,18 @@ export default function LoadoutScreen() {
     [dispatch, selectProfile]
   )
 
-  // The app-wide theme follows whichever colors are actually live here — primary is always P1's,
+  // The app-wide theme follows whichever colors are actually live here - primary is always P1's,
   // secondary is P2's (human or CPU, whichever seat 2 currently is), tertiary the third color
   // maximally distinct from both, so a board/HUD element that wants a neutral accent never clashes
   // with either seat. Goes through auto-paper's own live settings setter (not a direct Redux
-  // dispatch) since Theme.tsx's `initialValue` only ever seeds the Provider once, at mount — `set`
+  // dispatch) since Theme.tsx's `initialValue` only ever seeds the Provider once, at mount - `set`
   // is what actually re-renders the running theme; Theme.tsx's existing onChange then mirrors this
   // out to Redux for us, so it still persists across a relaunch with no extra wiring here.
   useEffect(() => {
     setThemeSettings({ color: { primary: p1Color, secondary: p2Color, tertiary: getThirdColor(p1Color, p2Color) } })
   }, [p1Color, p2Color, setThemeSettings])
 
-  // Covers every genuine gameplay variant LoadoutSharedControls exposes — wrapEdges (a coin flip,
+  // Covers every genuine gameplay variant LoadoutSharedControls exposes - wrapEdges (a coin flip,
   // same as before), arenaVariant/gridSizeTier (a random pick off the same option list each picker
   // itself offers), speedTier (same), and enabledPowerups (an independent coin flip per type,
   // matching wrapEdges' own single-line style rather than picking from a curated subset). Per-seat stuff
@@ -342,7 +342,7 @@ export default function LoadoutScreen() {
   // "match settings" in the sense a player means when they ask to shuffle or reset the current
   // round. fullScreen is the one exception left inside the row itself: still a toggle in the same
   // bundled dropdown as wrapEdges/arenaVariant (see FULL_SCREEN_OPTION above), but deliberately not
-  // shuffled here — it governs the board's @tastic/core gutter inset (see game.tsx), which makes it
+  // shuffled here - it governs the board's @tastic/core gutter inset (see game.tsx), which makes it
   // a stable "how does the board fit my screen" preference rather than a gameplay variant, and
   // players would find it disorienting for that to flip on a random shuffle mid-session.
   const handleRandomizeMatchSettings = useCallback(() => {
@@ -380,7 +380,7 @@ export default function LoadoutScreen() {
   )
 
   // 2 Player always means twoPlayer; 1 Player means vsCpu for a real difficulty, or Snake's own
-  // genuine no-opponent solo mode for "None" — the one piece of this screen with no equivalent in
+  // genuine no-opponent solo mode for "None" - the one piece of this screen with no equivalent in
   // either BoxHockey's or LightCycles' own loadout/lobby screen (see loadout's header comment).
   // game.tsx/useSnakeState.ts already handle mode:'solo' and mode:'vsCpu' exactly as before this
   // redesign, reading cpuDifficulty from the round's settings the same way: nothing downstream of
@@ -402,7 +402,7 @@ export default function LoadoutScreen() {
     // change made mid-match only affects the next match. The mode and colors still travel as route
     // params: Settings has no mode of its own.
     dispatch(liveplayActions.setActiveRoundSettings(settingsRef.current))
-    // p2Color is omitted for solo, honestly reflecting "there is no second seat" — matching how
+    // p2Color is omitted for solo, honestly reflecting "there is no second seat" - matching how
     // Solo already worked pre-redesign, when it skipped /loadout and went straight to /game with
     // no p2Color param at all.
     router.push({ pathname: '/game', params: finalMode === 'solo' ? { mode: finalMode, p1Color } : { mode: finalMode, p1Color, p2Color } })
@@ -413,15 +413,15 @@ export default function LoadoutScreen() {
   const fgMuted = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'
 
   const isPortrait = panelLayout.orientationMode === 'faceToFace'
-  // See @tastic/split-screen's needsSharedNeutralZone for the full reasoning — extracted there
+  // See @tastic/split-screen's needsSharedNeutralZone for the full reasoning - extracted there
   // once this exact boolean turned up independently hand-duplicated across LightCycles/BoxHockey/
   // AirHockey too.
   const showMetaInSharedBand = needsSharedNeutralZone(panelLayout.orientationMode, humanPlayers.length)
 
-  // Where seat 2's own press-away zone lives on screen — matches panelLayout (the already-committed,
+  // Where seat 2's own press-away zone lives on screen - matches panelLayout (the already-committed,
   // currently-painted layout), not the live orientationMode/p1OnRight/upsideDown, since it needs to
   // agree with whichever arrangement is actually on screen right now, mid-fade included. Only
-  // meaningful in 2 Player mode — 1 Player's CPU slot shares controlsHost instead (see p2Host
+  // meaningful in 2 Player mode - 1 Player's CPU slot shares controlsHost instead (see p2Host
   // below), so it never needs a zone of its own.
   const p2ZoneStyle = routeMode === 'twoPlayer' ? (isPortrait ? styles.p2ZoneTop : panelLayout.p1OnRight ? styles.p2ZoneLeft : styles.p2ZoneRight) : null
 
@@ -459,7 +459,7 @@ export default function LoadoutScreen() {
       onPowerupsChange={(value) => setSettings({ enabledPowerups: value })}
       // Omitted (leaving LoadoutSharedControls' own actionsRow unrendered) whenever
       // showMetaInSharedBand is about to fold randomize/reset into its own merged header row
-      // instead — otherwise both would render at once.
+      // instead - otherwise both would render at once.
       onRandomize={showMetaInSharedBand ? undefined : handleRandomizeMatchSettings}
       onReset={showMetaInSharedBand ? undefined : handleResetMatchSettings}
       accentColor={themeColors.tertiary}
@@ -469,7 +469,7 @@ export default function LoadoutScreen() {
     />
   )
 
-  // Only wrapped for showMetaInSharedBand (see its own comment above) — everywhere else back/
+  // Only wrapped for showMetaInSharedBand (see its own comment above) - everywhere else back/
   // settings stay in their usual top corners (CornerActionButtons below) and randomize/reset stay
   // in LoadoutSharedControls' own row above the trigger gauge. SharedActionBand owns the "is the
   // open popover actually one of mine" self-elevation check internally, given just the resolved
@@ -484,7 +484,7 @@ export default function LoadoutScreen() {
   )
 
   // @tastic/hud's PlayerSetupPanel has no opinion on what (if anything) sits beside the color
-  // picker — see its own secondPicker doc — so this app constructs the same ControlSchemePicker it
+  // picker - see its own secondPicker doc - so this app constructs the same ControlSchemePicker it
   // always has and hands it in directly, sharing whichever host that panel's own color picker uses
   // so a popover from either one still elevates the shared pickerRow correctly. secondPickerId names
   // the popover id it opens under, so PlayerSetupPanel's own "elevate while one of my own popovers
@@ -493,13 +493,13 @@ export default function LoadoutScreen() {
   const p2ControlSchemePicker = p2IsHuman ? <ControlSchemePicker id='p2-controls' host={p2Host} value={controlScheme[2]} onChange={(scheme) => setSettings({ controlScheme: assignSeatScheme(controlScheme, 2, scheme) })} options={CONTROL_SCHEME_OPTIONS} takenValue={controlScheme[1]} accentColor={p2Color} mutedColor={fgMuted} dark={dark} /> : undefined
 
   // @tastic/hud@0.9.0 added cpuDifficultyAlignOverride, a pass-through from PlayerSetupPanel down
-  // to its own internal LabeledDropdown's pre-existing alignOverride prop — closing the exact gap
+  // to its own internal LabeledDropdown's pre-existing alignOverride prop - closing the exact gap
   // LightCycles' own lobby.tsx p2Panel comment used to document (no override existed at all before
   // this version). Wired in here for parity with every other zone-aware popover on this screen, but
   // it's a confirmed no-op for Snake specifically, not a real fix: the CPU-difficulty picker only
   // ever renders for a non-human seat 2 (cpuDifficulty={p2IsHuman ? undefined : difficulty} below),
   // which only exists in 1 Player mode, and 1 Player always renders in the plain stacked View branch
-  // below (routeMode === 'onePlayer'), never inside DualZoneLayout — so there is no ambient
+  // below (routeMode === 'onePlayer'), never inside DualZoneLayout - so there is no ambient
   // @tastic/split-screen zone for it to clamp against. useZoneBounds() is therefore null there and
   // useZoneClampedAlign silently falls back to useAutoAlign's own plain screen-edge-relative result,
   // exactly as LightCycles documented for its own identical case.
@@ -507,7 +507,7 @@ export default function LoadoutScreen() {
   const cpuDifficultyAlignOverride = useZoneClampedAlign(cpuDifficultyOpen, LABELED_DROPDOWN_POPOVER_WIDTH, getLabeledDropdownContentHeight(CPU_DIFFICULTY_OPTIONS.length))
 
   // Same zone-clamped-alignment need as cpuDifficultyAlignOverride just above, but for each seat's
-  // own color picker instead — unlike the CPU-difficulty picker, EVERY seat (p1 and human-or-CPU p2)
+  // own color picker instead - unlike the CPU-difficulty picker, EVERY seat (p1 and human-or-CPU p2)
   // always has one, and both panels pass the same swatches={defaultColors} palette, so their content
   // size is identical and only needs computing once. Unlike cpuDifficultyAlignOverride, this is a
   // real fix, not a confirmed no-op: p1Panel/p2Panel render directly inside a live DualZoneLayout
@@ -554,7 +554,7 @@ export default function LoadoutScreen() {
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <FakeLandscapeView orientationMode={panelLayout.orientationMode} p1OnRight={panelLayout.p1OnRight} upsideDown={panelLayout.upsideDown} style={styles.rotatable}>
-        {/* Press-away overlays for this screen's own popovers (color/profile pickers) — see
+        {/* Press-away overlays for this screen's own popovers (color/profile pickers) - see
         PressAwayOverlay's own comment for the paint-order trick that keeps real controls directly
         tappable. Seat 1's covers the whole screen, while seat 2's is scoped to just their own half
         (p2ZoneStyle) and, being a later sibling, takes priority over seat 1's within that rect. */}
@@ -572,7 +572,7 @@ export default function LoadoutScreen() {
             shared={sharedControls}
             // Without these, a popover escaping its own zone (e.g. the shared board dropdown
             // growing down into P1/P2's row below it) paints underneath whichever zone happens
-            // to be the later DOM sibling, regardless of which one actually has something open —
+            // to be the later DOM sibling, regardless of which one actually has something open -
             // see DualZoneLayout's own p1Elevated/p2Elevated/sharedElevated doc for the
             // stacking-context reason a zone can't just self-elevate the way
             // PlayerSetupPanel/LoadoutSharedControls already do internally. Same openId checks
@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0
   },
-  // Only used by 1 Player's stacked (non-rotated) layout above — 2 Player's own DualZoneLayout
+  // Only used by 1 Player's stacked (non-rotated) layout above - 2 Player's own DualZoneLayout
   // handles its own spacing.
   playersRow: {
     flexDirection: 'row',

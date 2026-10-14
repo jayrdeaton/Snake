@@ -21,7 +21,7 @@ const RootNavigator = () => {
     <Stack
       screenOptions={useThemedRootBackground(
         dark,
-        // gestureEnabled: false — iOS's native swipe-back gesture otherwise fights
+        // gestureEnabled: false - iOS's native swipe-back gesture otherwise fights
         // TouchInputLayer's own swipe-to-turn Pan gestures on /game. Same rationale as
         // LightCycles' root _layout.tsx (confirmed there on-device): the OS gesture wins,
         // silently kicking the player back to the title screen mid-round instead of turning
@@ -30,9 +30,9 @@ const RootNavigator = () => {
         false
       )}
     >
-      {/* (tabs) removed — that group's directory was already deleted in an earlier phase, and
+      {/* (tabs) removed - that group's directory was already deleted in an earlier phase, and
       this app has no tab bar; its real screens are the title screen, the loadout screen (1
-      Player/2 Player — see loadout.tsx), the game itself, and profile management. */}
+      Player/2 Player - see loadout.tsx), the game itself, and profile management. */}
       <Stack.Screen name='index' />
       <Stack.Screen name='loadout' />
       <Stack.Screen name='game' />
@@ -75,7 +75,7 @@ const RootLayout = () => {
       Providers' own <ToastProvider> tree (Providers.tsx renders <ToastProvider>{children}
       <Toaster .../></ToastProvider>) and its onError -> toast wiring has a real useToast() context
       to call into. It replaces the old bare useUpdater() call this function used to make directly
-      — that call had no UI of its own (useUpdater's default is a native Alert.alert prompt, a
+      - that call had no UI of its own (useUpdater's default is a native Alert.alert prompt, a
       hard no-op on web); this renders a themed ConfirmDialog instead, via @tastic/hud's own
       UpdateDialog, which now owns the useUpdater() instance end to end. */}
       <UpdateDialog />
@@ -89,7 +89,7 @@ const RootLayout = () => {
       sensor subscription is what makes the committed orientation survive screen navigation (index
       -> game and back), instead of each screen's own hook instance restarting from a default guess
       on every mount. */}
-      {/* @tastic/core's own OrientationProvider never imports expo-sensors itself — a real
+      {/* @tastic/core's own OrientationProvider never imports expo-sensors itself - a real
       top-level import there would force every consumer of the package (even one with zero
       interest in tilt tracking) to have expo-sensors installed, or Metro fails to resolve it.
       This app genuinely wants live tilt tracking, so it does its own real import and hands the
