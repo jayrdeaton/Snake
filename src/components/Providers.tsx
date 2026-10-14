@@ -1,4 +1,4 @@
-import { FeedbackPressProvider, hapticActions, type HapticSettings, soundActions, type SoundSettings, useFeedbackBridgeProps } from '@rific/feedback-press'
+import { FeedbackPressProvider, hapticActions, type HapticSettings, soundActions, type SoundSettings, useFeedbackBridgeProps, useHapticSettings } from '@rific/feedback-press'
 import { scrollViewActions, type ScrollViewSettings, ScrollViewSettingsProvider } from '@rific/scroll-view'
 import { Toaster, ToastProvider } from '@rific/toaster'
 import { useEdgeGestureGuard } from '@tastic/edge-guard'
@@ -56,6 +56,19 @@ const ScrollViewBridge = ({ children }: Props) => {
   )
 }
 
+// The toaster only gets expo-haptics while the player's Vibrate setting is on, so its haptic ticks
+// follow the same setting as every other haptic in the app. Today they can't fire anyway (the only
+// controls that tick, the history and clear buttons, are off below), but this keeps it that way if
+// either is ever shown. Must render inside FeedbackBridge, which provides the setting.
+const HapticGatedToastProvider = ({ children }: Props) => {
+  const { settings } = useHapticSettings()
+  return (
+    <ToastProvider haptics={settings.vibrate ? Haptics : undefined} paper={RNPaper}>
+      {children}
+    </ToastProvider>
+  )
+}
+
 export const Providers = ({ children }: Props) => {
   return (
     <GestureHandlerRootView>
@@ -67,7 +80,7 @@ export const Providers = ({ children }: Props) => {
                 <ScrollViewBridge>
                   <KeyboardProvider>
                     <Theme>
-                      <ToastProvider haptics={Haptics} paper={RNPaper}>
+                      <HapticGatedToastProvider>
                         {children}
                         {/* historyButton/clearButton off - matches AirHockey/BoxHockey/Pong/LightCycles;
                         limit is already the package's own default (3), pinned explicitly so it stays 3
@@ -76,7 +89,7 @@ export const Providers = ({ children }: Props) => {
                         that historyButton is hidden and nothing calls useToast().openHistory(); removed
                         along with the @rific/drawer dependency itself. */}
                         <Toaster historyButton={null} clearButton={null} limit={3} />
-                      </ToastProvider>
+                      </HapticGatedToastProvider>
                     </Theme>
                   </KeyboardProvider>
                 </ScrollViewBridge>

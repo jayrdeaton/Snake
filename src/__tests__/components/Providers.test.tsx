@@ -1,9 +1,12 @@
 import { render } from '@testing-library/react-native'
+import * as Haptics from 'expo-haptics'
 import { Text } from 'react-native'
 
 import { Providers } from '../../components/Providers'
 
 const mockHapticProviderCalls: unknown[] = []
+const mockToastProviderCalls: { haptics?: unknown }[] = []
+let mockVibrate = true
 jest.mock('@rific/auto-paper', () => ({
   Provider: (props: any) => props.children,
   themeActions: { initialize: (payload: unknown) => ({ payload, type: 'theme/initialize' }) },
@@ -30,12 +33,16 @@ jest.mock('@rific/feedback-press', () => ({
   // useFeedbackBridgeProps) - an identity function reproduces that here, so Providers.tsx's
   // `<FeedbackPressProvider {...bridgeProps}>` still receives initialValue/soundInitialValue
   // unchanged, exactly as it did before Providers.tsx called this hook.
-  useFeedbackBridgeProps: (props: any) => props
+  useFeedbackBridgeProps: (props: any) => props,
+  useHapticSettings: () => ({ settings: { vibrate: mockVibrate } })
 }))
 
 jest.mock('@rific/toaster', () => ({
   Toaster: () => null,
-  ToastProvider: (props: any) => props.children
+  ToastProvider: (props: any) => {
+    mockToastProviderCalls.push(props)
+    return props.children
+  }
 }))
 
 jest.mock('../../utils/splashGate', () => ({
@@ -45,6 +52,8 @@ jest.mock('../../utils/splashGate', () => ({
 
 beforeEach(() => {
   mockHapticProviderCalls.length = 0
+  mockToastProviderCalls.length = 0
+  mockVibrate = true
 })
 
 describe('Providers', () => {
@@ -87,5 +96,26 @@ describe('Providers', () => {
     )
     expect(mockHapticProviderCalls.length).toBeGreaterThan(0)
     expect(mockHapticProviderCalls[0]).toEqual(expect.objectContaining({ soundInitialValue: expect.objectContaining({ enabled: false }) }))
+  })
+
+  it('hands expo-haptics to the toaster while Vibrate is on', async () => {
+    await render(
+      <Providers>
+        <Text>child</Text>
+      </Providers>
+    )
+    expect(mockToastProviderCalls.length).toBeGreaterThan(0)
+    expect(mockToastProviderCalls[mockToastProviderCalls.length - 1].haptics).toBe(Haptics)
+  })
+
+  it('withholds expo-haptics from the toaster while Vibrate is off', async () => {
+    mockVibrate = false
+    await render(
+      <Providers>
+        <Text>child</Text>
+      </Providers>
+    )
+    expect(mockToastProviderCalls.length).toBeGreaterThan(0)
+    expect(mockToastProviderCalls[mockToastProviderCalls.length - 1].haptics).toBeUndefined()
   })
 })
