@@ -82,6 +82,10 @@
       "eas": {
         "projectId": "32bc84c9-573d-4735-a1a4-70fb22d3c1a9"
       }
-    }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/32bc84c9-573d-4735-a1a4-70fb22d3c1a9"
+    },
+    "owner": "jayrdeaton"
   }
 }

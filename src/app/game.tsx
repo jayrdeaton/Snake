@@ -321,21 +321,22 @@ export default function GameScreen() {
     setNewHighScoreSeats(newHighScore)
     const unlocked = recordRoundOutcome({ mode, seats, winner }, { cpuDifficulty, profileIds })
 
-    // Both seats are human and physically opposite each other in 2 Player, so device-wide unlocks
-    // (no seat owner of their own) are broadcast into BOTH seats' lists, same as LightCycles'
-    // identical broadcast, so each seat's GameOverDialog card shows them. Solo/Vs CPU never populate
-    // this (see achievementUnlocks' own comment above). Shared via @tastic/achievements' own
-    // broadcastDeviceUnlocks; a round where nothing unlocked comes back as {}, not {1:[],2:[]}.
-    const seatUnlocks: Partial<Record<SnakeId, AchievementDefinition[]>> = mode === 'twoPlayer' ? broadcastDeviceUnlocks([1, 2] as SnakeId[], unlocked.profiles, unlocked.device) : {}
-    setAchievementUnlocks(seatUnlocks)
+    // Each human seat's own unlocks plus the device-wide ones that are really that seat's (all of
+    // them for a guest, only scope: 'device' ones for a profile; see @tastic/achievements'
+    // broadcastDeviceUnlocks), same as LightCycles. A round where nothing unlocked comes back as {}.
+    const seatUnlocks = broadcastDeviceUnlocks(humanPlayers, unlocked.profiles, unlocked.device, profileIds)
+
+    // 2 Player: both seats are human and physically opposite each other, so each seat's
+    // GameOverDialog card shows its own list. Solo/Vs CPU never populate this (see
+    // achievementUnlocks' own comment above).
+    setAchievementUnlocks(mode === 'twoPlayer' ? seatUnlocks : {})
 
     // Solo/Vs CPU: only ever one human perspective to address (Solo has no seat 2 at all; Vs CPU's
     // seat 2 is the CPU and never earns a profile unlock of its own), so the existing screen-fixed
     // toast is already always right-side-up for whoever's looking - no reason to route these into
     // the dialog too.
     if (mode !== 'twoPlayer') {
-      const merged = [...unlocked.device, ...(unlocked.profiles[1] ?? [])]
-      merged.forEach((achievement) => {
+      ;(seatUnlocks[1] ?? []).forEach((achievement) => {
         showAchievementToast(achievement.title, 'Achievement unlocked', undefined, { color: ACHIEVEMENT_TIER_COLORS[achievement.tier], icon: achievement.icon })
       })
     }

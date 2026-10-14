@@ -36,11 +36,11 @@ const PANEL_SWAP_FADE_MS = 180
 type CpuDifficultyChoice = CpuDifficulty | 'none'
 
 // Snake-flavored escalation instead of a plain skill-level label, matching LightCycles' own
-// Drone/Bot/MCP convention but in reptile language rather than Tron's: "Garter" (a real, famously
+// Drone/Bot/Mainframe convention but in reptile language rather than computer language: "Garter" (a real, famously
 // harmless beginner snake), "Rattler" (a genuine pit-viper threat), "King Cobra" (the world's
 // longest venomous snake - the apex/final-boss tier, and "King" signals that status the same way
-// MCP's own name does). The underlying CpuDifficulty value stays plain 'easy'/'normal'/'hard'
-// throughout the engine/AI/stats - same split LightCycles itself uses, where Drone/Bot/MCP are
+// Mainframe does). The underlying CpuDifficulty value stays plain 'easy'/'normal'/'hard'
+// throughout the engine/AI/stats - same split LightCycles itself uses, where Drone/Bot/Mainframe are
 // display labels only and never touch the real difficulty value.
 // Plus a 4th "None" choice LightCycles has no equivalent of - Snake's 1-Player flow folds its
 // genuine no-opponent Solo mode in here alongside a real CPU difficulty (see finalMode below).

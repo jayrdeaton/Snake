@@ -44,7 +44,7 @@
     "@rific/updater": "^0.6.0",
     "@shopify/flash-list": "2.0.2",
     "@shopify/react-native-skia": "2.6.2",
-    "@tastic/achievements": "^0.4.0",
+    "@tastic/achievements": "^0.5.0",
     "@tastic/core": "^0.13.0",
     "@tastic/edge-guard": "^0.1.4",
     "@tastic/grid": "^0.1.2",
