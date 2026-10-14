@@ -10,11 +10,15 @@ import { markSplashReady, useSplashReady } from '../../utils/splashGate'
 jest.mock('../../utils/splashGate', () => ({
   markSplashReady: jest.fn(),
   // A real (not mocked) useSplashReady would need a real createGate instance behind it.
-  // Theme's own 'fonts' gate is driven by useFonts below, which the mock in jest.setup.ts already
-  // resolves synchronously to `[true]`, so there's nothing useful this fake would add beyond not
-  // throwing when Theme calls it.
+  // Theme's own 'fonts' gate is driven by useFonts, which mockUseFonts below resolves synchronously,
+  // so there's nothing useful this fake would add beyond not throwing when Theme calls it.
   useSplashReady: jest.fn()
 }))
+
+// Resolved by default, like the shared src/__mocks__/expo-font.ts; the font-gate tests below override
+// it to a failed or still-pending load.
+const mockUseFonts = jest.fn<[boolean, Error | null], []>()
+jest.mock('expo-font', () => ({ useFonts: () => mockUseFonts() }))
 
 // Keep provider spy in module scope so the factory closure can reference it.
 const mockProviderCalls: unknown[] = []
@@ -44,6 +48,7 @@ const makeStore = (themeState: { appearance: 'light' | 'dark' | 'system'; color:
 beforeEach(() => {
   jest.clearAllMocks()
   mockProviderCalls.length = 0
+  mockUseFonts.mockReturnValue([true, null])
 })
 
 describe('Theme', () => {
@@ -110,8 +115,8 @@ describe('Theme', () => {
     expect(mockMarkSplashReady).toHaveBeenCalledWith('theme')
   })
 
-  // The icon font mock in jest.setup.ts resolves useFonts synchronously to [true]. See its own
-  // comment for why every react-native-paper icon in this app depends on that exact font.
+  // mockUseFonts resolves synchronously to [true, null] by default. See Theme.tsx's own comment for
+  // why every react-native-paper icon in this app depends on that exact font.
   it("marks the 'fonts' splash gate ready once the icon font resolves", async () => {
     await render(
       <ReduxProvider store={makeStore()}>
@@ -121,5 +126,33 @@ describe('Theme', () => {
       </ReduxProvider>
     )
     expect(mockUseSplashReady).toHaveBeenCalledWith('fonts', true)
+  })
+
+  // A rejected load leaves useFonts' `loaded` false forever, so gating on it alone would never lift
+  // the splash.
+  it("marks the 'fonts' splash gate ready when the font load fails", async () => {
+    mockUseFonts.mockReturnValue([false, new Error('font failed')])
+    await render(
+      <ReduxProvider store={makeStore()}>
+        <Theme>
+          <Text>child</Text>
+        </Theme>
+      </ReduxProvider>
+    )
+    expect(mockUseSplashReady).toHaveBeenCalledWith('fonts', true)
+    expect(mockUseSplashReady).not.toHaveBeenCalledWith('fonts', false)
+  })
+
+  it("keeps the 'fonts' splash gate closed while the font is still loading", async () => {
+    mockUseFonts.mockReturnValue([false, null])
+    await render(
+      <ReduxProvider store={makeStore()}>
+        <Theme>
+          <Text>child</Text>
+        </Theme>
+      </ReduxProvider>
+    )
+    expect(mockUseSplashReady).toHaveBeenCalledWith('fonts', false)
+    expect(mockUseSplashReady).not.toHaveBeenCalledWith('fonts', true)
   })
 })

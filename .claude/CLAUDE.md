@@ -13,7 +13,7 @@ A classic Snake game with Solo, Vs CPU, and local simultaneous split-screen 2 Pl
 ```bash
 npm run lint          # expo lint .
 npm run fix            # expo lint . --fix
-npm test               # Jest (24 suites, 265 tests)
+npm test               # Jest (25 suites, 275 tests)
 npm run test:watch     # Jest --watchAll
 npm run typecheck      # tsc
 npm run verify         # lint + test + typecheck
@@ -164,7 +164,15 @@ Seven fixes from the verified 2026-09-29 fleet audit (`verified-2026-10-08.json`
 ## Achievement toasts and EAS config (2026-10-14)
 
 - **Toasts:** `game.tsx` now gets every mode's unlocks from `@tastic/achievements`' `broadcastDeviceUnlocks(humanPlayers, unlocked.profiles, unlocked.device, profileIds)` (the 4-argument form, @tastic/achievements 0.5.0+). Solo/Vs CPU toast `seatUnlocks[1]`; 2 Player hands the whole map to `GameOverDialog`. The old Solo/Vs CPU merge `[...unlocked.device, ...unlocked.profiles[1]]` toasted a profile's first-round achievements twice (`device` evaluates the whole catalog, so "First Slither" unlocked both device-wide and for the profile) and credited a profile with device totals another profile reached ("Getting Started" on Bob's first round after Alice's nine). A seat with a profile now gets only `scope: 'device'` entries from `device`; a guest seat gets all of it. Same change in LightCycles; AirHockey, BoxHockey and Pong still have the old merge until they adopt the release.
-- **`app.json`:** gained `owner: "jayrdeaton"` and `updates.url` (the other launch games already had both). Without `updates.url`, production builds would not have received OTA updates despite `expo-updates` being installed.
+- **`app.json`:** gained `owner: "jayrdeaton"` and `updates.url` (the other launch games already had both). Without `updates.url`, production builds would not have received OTA updates despite `expo-updates` being installed. That commit added the url as a second `updates` key, which silently replaced the first one (`checkAutomatically`, `fallbackToCacheTimeout`); merged back into one block the same day.
+
+## Audit fixes (2026-10-14)
+
+Three medium/low bugs from the 2026-10-08 audit that the high-priority fix pass didn't cover. Snake only; the other games still have them.
+
+- **Seat color clash (F042):** picking a profile skipped the color picker's `takenColor` check, so a profile saved as the other seat's color gave both snakes the same color. `/loadout` now runs seat 2's resolved color through `avoidSeatColorClash` (`src/utils/seatColors.ts`) in both places it seeds colors (the `useState` initializers and the focus effect): on a clash, seat 2 takes `SNAKE_COLORS[1]`, or `SNAKE_COLORS[2]` if seat 1 is already on it. Same rule as LightCycles' lobby. The nudge is not persisted (a guest's or the CPU's remembered color is left alone). Checked live on web: Tester (`#f44336`) picked for P1 against a P2 guest on `#f44336` moves P2 to green.
+- **Back after game over (F094):** `game.tsx`'s `useQuitConfirmation` getter now returns false once `phase === 'gameOver'`, so the back chip exits at once, like the result card's own Quit. Not covered by a test (`game.tsx` has no render test).
+- **Font-load failure (F010):** `Theme.tsx` marks the `fonts` splash gate ready on `fontsLoaded || !!fontError`; a failed load used to leave the splash up forever. `Theme.test.tsx` now mocks `expo-font` locally (`mockUseFonts`) to cover the error and still-loading cases.
 
 ## Testing
 

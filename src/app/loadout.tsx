@@ -23,6 +23,7 @@ import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { AppDispatch, RootState } from '@/redux/store'
 import { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
 import { safeBack } from '@/utils/navigation'
+import { avoidSeatColorClash } from '@/utils/seatColors'
 import { CpuDifficulty } from '@/utils/snakeAi'
 
 // Same 180ms panel-swap fade every other @tastic loadout screen uses (see BoxHockey's/AirHockey's
@@ -166,9 +167,10 @@ export default function LoadoutScreen() {
   // every other call site. Seeded here from whichever source currently owns the seat's color
   // (profile, honoring any active override, > last guest color, or last CPU color for 1 Player's
   // seat 2) so the very first paint already matches; the focus effect below is what keeps it that
-  // way afterward.
+  // way afterward. Seat 2 is moved off seat 1's color if the two sources land on the same one (see
+  // avoidSeatColorClash).
   const [p1Color, setP1Color] = useState(() => (p1Profile ? (profileOverride[1] ?? p1Profile.color) : lastGuestColor[1]))
-  const [p2Color, setP2Color] = useState(() => (p2IsHuman ? (p2Profile ? (profileOverride[2] ?? p2Profile.color) : lastGuestColor[2]) : lastCpuColor))
+  const [p2Color, setP2Color] = useState(() => avoidSeatColorClash(p1Color, p2IsHuman ? (p2Profile ? (profileOverride[2] ?? p2Profile.color) : lastGuestColor[2]) : lastCpuColor))
 
   // 1 Player's own CPU-seat choice - Easy/Normal/Hard/None (see CPU_DIFFICULTY_OPTIONS). Seeded
   // from (and, on every focus, reset back to) the persisted preference, same convention as
@@ -217,8 +219,9 @@ export default function LoadoutScreen() {
   useFocusEffect(
     useCallback(() => {
       const override = profileOverrideRef.current
-      setP1Color(p1ProfileRef.current ? (override[1] ?? p1ProfileRef.current.color) : lastGuestColorRef.current[1])
-      setP2Color(p2IsHuman ? (p2ProfileRef.current ? (override[2] ?? p2ProfileRef.current.color) : lastGuestColorRef.current[2]) : lastCpuColorRef.current)
+      const p1Target = p1ProfileRef.current ? (override[1] ?? p1ProfileRef.current.color) : lastGuestColorRef.current[1]
+      setP1Color(p1Target)
+      setP2Color(avoidSeatColorClash(p1Target, p2IsHuman ? (p2ProfileRef.current ? (override[2] ?? p2ProfileRef.current.color) : lastGuestColorRef.current[2]) : lastCpuColorRef.current))
       setDifficulty(persistedCpuDifficultyRef.current ?? 'none')
       // lastSelected is intentionally a trigger-only dependency here - a fresh tap-select or
       // guest/profile switch must reapply the seat's color, even though the callback body reads the

@@ -134,9 +134,10 @@ export default function GameScreen() {
   // cancelBack, not the ConfirmDialog JSX/copy itself). Called above useSnakeState, like AirHockey's,
   // because `paused` below (which useSnakeState takes) depends on confirmVisible: the getter reads
   // humanScore/opponentScore, declared further down from useSnakeState's state, only lazily, inside
-  // a real requestBack() call.
+  // a real requestBack() call. Once the round is over (gameOver) its stats are already recorded and
+  // nothing is lost, so back exits at once, the same as the result card's own Quit.
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const { confirmVisible, requestBack, cancelBack } = useQuitConfirmation(() => humanScore > 0 || (opponentScore ?? 0) > 0, safeBack)
+  const { confirmVisible, requestBack, cancelBack } = useQuitConfirmation(() => phase !== 'gameOver' && (humanScore > 0 || (opponentScore ?? 0) > 0), safeBack)
   // Leaving the app mid-match (home, app switch, a phone call, Control Center) latches a pause that
   // only the Paused dialog's Resume clears - see @tastic/core's useBackgroundPause. Skipped once the
   // match is over, or while a dialog already holds the pause by itself.
