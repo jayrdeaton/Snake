@@ -1,6 +1,6 @@
 {
   "name": "snake",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "A classic Snake game with Solo, Vs CPU, and local 2-player pass-and-play modes.",
   "type": "commonjs",

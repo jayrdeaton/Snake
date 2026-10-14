@@ -1,0 +1,62 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "copyright": "2026 Jay Deaton",
+    "categories": [
+      [
+        "GAMES",
+        "GAMES_ACTION",
+        "GAMES_CASUAL"
+      ]
+    ],
+    "info": {
+      "en-US": {
+        "title": "SnakeTastic",
+        "subtitle": "Classic Snake. No Ads.",
+        "description": "Classic Snake, rebuilt for one shared phone: play solo, take on the CPU, or go head to head with a friend. No ads, no accounts.\n\n• Solo, Vs CPU (Garter, Rattler, or King Cobra), and 2 Player on one device\n• Five arenas: Open, Pillars, Gauntlet, Portals, and Underpass\n• Three speeds, three grid sizes, and Wrap Edges\n• Six optional powerups, from a speed boost to reversed controls\n• Player profiles, stats, and 33 achievements\n• Retro sound effects and haptics\n• Plays offline\n\nPart of the Tastic family of games. Your player profiles are shared with the other Tastic games on your device.\n\nOpen source on GitHub: https://github.com/jayrdeaton/Snake",
+        "keywords": [
+          "arcade",
+          "retro",
+          "classic",
+          "two player",
+          "multiplayer",
+          "local",
+          "versus",
+          "worm",
+          "pass and play",
+          "offline"
+        ],
+        "marketingUrl": "https://snake.infinitetoken.com",
+        "supportUrl": "https://infinitetoken.com",
+        "privacyPolicyUrl": "https://snake.infinitetoken.com/privacy"
+      }
+    },
+    "advisory": {
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gamblingSimulated": "NONE",
+      "gunsOrOtherWeapons": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "gambling": false,
+      "healthOrWellnessTopics": false,
+      "lootBox": false,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "unrestrictedWebAccess": false,
+      "userGeneratedContent": false,
+      "kidsAgeBand": null,
+      "ageRatingOverride": "NONE",
+      "koreaAgeRatingOverride": "NONE"
+    }
+  }
+}
