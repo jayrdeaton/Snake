@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cpuDifficulty: null,
   lockOrientation: false,
   deferBottomEdgeGestures: false,
+  keepAwake: true,
   // Asymmetric defaults (not both 'mouse') so two seats sharing one desktop's keyboard/mouse don't
   // start out colliding, mirroring LightCycles' own asymmetric {1:'wasd',2:'arrows'} default.
   controlScheme: { 1: 'mouse', 2: 'wasd' },

@@ -1,5 +1,5 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
-import { OrientationProvider, RotationAwareStatusBar, useThemedRootBackground } from '@tastic/core'
+import { OrientationProvider, useRotationAwareStatusBar, useThemedRootBackground } from '@tastic/core'
 import { Stack } from 'expo-router'
 import { DeviceMotion } from 'expo-sensors'
 import * as SplashScreen from 'expo-splash-screen'
@@ -15,27 +15,40 @@ import { useSettings } from '@/hooks/useSettings'
 SplashScreen.preventAutoHideAsync()
 SplashScreen.setOptions({ fade: true, duration: 400 })
 
+// useRotationAwareStatusBar (@tastic/core) hides the OS status bar whenever content is visually
+// rotated (see @tastic/core's getViewRotation/FakeLandscapeView), matching BoxHockey's/LightCycles'/
+// AirHockey's root layouts. It does it through screen options because that is the only way left:
+// an app linked against the iOS 27 SDK can't set the status bar app-wide, which is all React
+// Native's StatusBar (and expo-status-bar) does on iOS, and with @tastic/core's config plugin on,
+// every mounted StatusBar logs an error. So nothing in the app mounts one (Theme passes
+// auto-paper's Provider statusBar={false}). It reads the same shared reading as the visible
+// content, which OrientationBridge freezes while Lock Orientation is on, so the two can't disagree
+// (hence no `locked` argument). /game hides the bar for the whole round, whatever the angle (a
+// screen's own options win over screenOptions), so this only matters on /index, /loadout,
+// /achievements and /profiles.
+const GAME_OPTIONS = { statusBarHidden: true }
+
 const RootNavigator = () => {
   const { dark } = useAutoPaperTheme()
+  const rootBackground = useThemedRootBackground(
+    dark,
+    // gestureEnabled: false - iOS's native swipe-back gesture otherwise fights
+    // TouchInputLayer's own swipe-to-turn Pan gestures on /game. Same rationale as
+    // LightCycles' root _layout.tsx (confirmed there on-device): the OS gesture wins,
+    // silently kicking the player back to the title screen mid-round instead of turning
+    // their snake. The title screen has nothing to swipe back to either way, and /game's
+    // own game-over dialog is the way back out once a round ends.
+    false
+  )
+  const statusBar = useRotationAwareStatusBar()
   return (
-    <Stack
-      screenOptions={useThemedRootBackground(
-        dark,
-        // gestureEnabled: false - iOS's native swipe-back gesture otherwise fights
-        // TouchInputLayer's own swipe-to-turn Pan gestures on /game. Same rationale as
-        // LightCycles' root _layout.tsx (confirmed there on-device): the OS gesture wins,
-        // silently kicking the player back to the title screen mid-round instead of turning
-        // their snake. The title screen has nothing to swipe back to either way, and /game's
-        // own game-over dialog is the way back out once a round ends.
-        false
-      )}
-    >
+    <Stack screenOptions={{ ...rootBackground, ...statusBar }}>
       {/* (tabs) removed - that group's directory was already deleted in an earlier phase, and
       this app has no tab bar; its real screens are the title screen, the loadout screen (1
       Player/2 Player - see loadout.tsx), the game itself, and profile management. */}
       <Stack.Screen name='index' />
       <Stack.Screen name='loadout' />
-      <Stack.Screen name='game' />
+      <Stack.Screen name='game' options={GAME_OPTIONS} />
       <Stack.Screen name='profiles' />
     </Stack>
   )
@@ -113,13 +126,6 @@ const RootLayout = () => {
             </GuideHost>
           </ProfilesProvider>
         </GameStatsProvider>
-        {/* Hides the OS status bar whenever content elsewhere is visually rotated (see
-        @tastic/core's getViewRotation/FakeLandscapeView), matching BoxHockey's/LightCycles'/
-        AirHockey's use of the same shared component. /game additionally hides it unconditionally
-        (see its own <StatusBar hidden />), so this only actually matters on /index, /loadout,
-        /achievements and /profiles. It reads the same shared reading as the visible content, which
-        OrientationBridge freezes while Lock Orientation is on, so the two can't disagree. */}
-        <RotationAwareStatusBar />
       </OrientationBridge>
     </Providers>
   )

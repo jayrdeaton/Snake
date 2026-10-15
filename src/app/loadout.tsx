@@ -2,7 +2,7 @@ import { defaultColors, getThirdColor, useAutoPaperTheme, useThemeSettings } fro
 import { FakeLandscapeView, getViewRotation, rotateInsets, useOrientationState } from '@tastic/core'
 import { ControlSchemePicker, CornerActionButtons, getColorPopoverId, getCpuDifficultyPopoverId, getInlineColorPickerContentSize, getLabeledDropdownContentHeight, LABELED_DROPDOWN_POPOVER_WIDTH, LabeledDropdownOption, MenuOption, PlayerSetupPanel, PressAwayOverlay, ReadyButton, SharedActionBand, usePopoverHost, useZoneClampedAlign } from '@tastic/hud'
 import { assignSeatScheme } from '@tastic/input'
-import type { Profile } from '@tastic/profile'
+import { avoidSeatColorClash, type Profile } from '@tastic/profile'
 import { DualZoneLayout, needsSharedNeutralZone, useDualZoneLayout } from '@tastic/split-screen'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -23,12 +23,15 @@ import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { AppDispatch, RootState } from '@/redux/store'
 import { ControlScheme, SnakeArenaVariant, SnakeGridSizeTier, SnakeId, SnakePowerupType, SnakeSpeedTier } from '@/types'
 import { safeBack } from '@/utils/navigation'
-import { avoidSeatColorClash } from '@/utils/seatColors'
 import { CpuDifficulty } from '@/utils/snakeAi'
+import { SNAKE_COLORS } from '@/utils/snakeEngine'
 
 // Same 180ms panel-swap fade every other @tastic loadout screen uses (see BoxHockey's/AirHockey's
 // own constant of the same name/value).
 const PANEL_SWAP_FADE_MS = 180
+
+// What @tastic/profile's avoidSeatColorClash moves seat 2 to when both seats land on one color.
+const SEAT_DEFAULT_COLORS = [SNAKE_COLORS[1], SNAKE_COLORS[2]] as const
 
 // 'none' is a Snake-specific extension beyond a plain CpuDifficulty - this seat's own "no CPU at
 // all" choice (see the 1-Player flow below), never persisted as a difficulty preference. Was
@@ -170,7 +173,7 @@ export default function LoadoutScreen() {
   // way afterward. Seat 2 is moved off seat 1's color if the two sources land on the same one (see
   // avoidSeatColorClash).
   const [p1Color, setP1Color] = useState(() => (p1Profile ? (profileOverride[1] ?? p1Profile.color) : lastGuestColor[1]))
-  const [p2Color, setP2Color] = useState(() => avoidSeatColorClash(p1Color, p2IsHuman ? (p2Profile ? (profileOverride[2] ?? p2Profile.color) : lastGuestColor[2]) : lastCpuColor))
+  const [p2Color, setP2Color] = useState(() => avoidSeatColorClash(p1Color, p2IsHuman ? (p2Profile ? (profileOverride[2] ?? p2Profile.color) : lastGuestColor[2]) : lastCpuColor, SEAT_DEFAULT_COLORS))
 
   // 1 Player's own CPU-seat choice - Easy/Normal/Hard/None (see CPU_DIFFICULTY_OPTIONS). Seeded
   // from (and, on every focus, reset back to) the persisted preference, same convention as
@@ -221,7 +224,7 @@ export default function LoadoutScreen() {
       const override = profileOverrideRef.current
       const p1Target = p1ProfileRef.current ? (override[1] ?? p1ProfileRef.current.color) : lastGuestColorRef.current[1]
       setP1Color(p1Target)
-      setP2Color(avoidSeatColorClash(p1Target, p2IsHuman ? (p2ProfileRef.current ? (override[2] ?? p2ProfileRef.current.color) : lastGuestColorRef.current[2]) : lastCpuColorRef.current))
+      setP2Color(avoidSeatColorClash(p1Target, p2IsHuman ? (p2ProfileRef.current ? (override[2] ?? p2ProfileRef.current.color) : lastGuestColorRef.current[2]) : lastCpuColorRef.current, SEAT_DEFAULT_COLORS))
       setDifficulty(persistedCpuDifficultyRef.current ?? 'none')
       // lastSelected is intentionally a trigger-only dependency here - a fresh tap-select or
       // guest/profile switch must reapply the seat's color, even though the callback body reads the
@@ -311,19 +314,23 @@ export default function LoadoutScreen() {
   // profile just got picked - see @tastic/profile's createSeatColorsSlice doc on profileOverride. selectProfile
   // itself only updates lastSelected; the color-sync effect/focus-effect above pick up this seat's
   // freshly-selected profile's own color once profileOverride[seat] has already been cleared here.
+  // Picking the other seat's profile swaps the two (see @tastic/profile's select), so the other
+  // seat's override is cleared too: its profile changes without its own handler running.
   const handleP1ProfileSelect = useCallback(
     (profile: Profile | null) => {
       dispatch(seatColorsActions.setProfileOverride({ seat: 1, color: null }))
+      if (profile && profile.id === lastSelected[2]) dispatch(seatColorsActions.setProfileOverride({ seat: 2, color: null }))
       selectProfile(1, profile?.id ?? null)
     },
-    [dispatch, selectProfile]
+    [dispatch, lastSelected, selectProfile]
   )
   const handleP2ProfileSelect = useCallback(
     (profile: Profile | null) => {
       dispatch(seatColorsActions.setProfileOverride({ seat: 2, color: null }))
+      if (profile && profile.id === lastSelected[1]) dispatch(seatColorsActions.setProfileOverride({ seat: 1, color: null }))
       selectProfile(2, profile?.id ?? null)
     },
-    [dispatch, selectProfile]
+    [dispatch, lastSelected, selectProfile]
   )
 
   // The app-wide theme follows whichever colors are actually live here - primary is always P1's,

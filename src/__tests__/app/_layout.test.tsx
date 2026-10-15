@@ -1,4 +1,4 @@
-import { OrientationProvider, RotationAwareStatusBar } from '@tastic/core'
+import { OrientationProvider, useRotationAwareStatusBar } from '@tastic/core'
 import { act, render } from '@testing-library/react-native'
 import * as SplashScreen from 'expo-splash-screen'
 
@@ -7,8 +7,12 @@ import { UpdateDialog } from '../../components/UpdateDialog'
 import { DEFAULT_SETTINGS, settingsActions } from '../../redux/settingsSlice'
 import { store } from '../../redux/store'
 
+// Stack and Stack.Screen record their props, so the status bar options RootNavigator hands the
+// native stack can be read back.
+const mockStack = jest.fn((props: any) => props.children)
+const mockStackScreen = jest.fn((_props: any) => null)
 jest.mock('expo-router', () => ({
-  Stack: Object.assign((props: any) => props.children, { Screen: () => null })
+  Stack: Object.assign((props: any) => mockStack(props), { Screen: (props: any) => mockStackScreen(props) })
 }))
 
 // Providers itself is stripped down to just a real ReduxProvider - this suite is testing
@@ -38,18 +42,22 @@ jest.mock('../../components/UpdateDialog', () => ({
 
 const mockUpdateDialog = UpdateDialog as jest.Mock
 
-// Only OrientationProvider and RotationAwareStatusBar are stubbed (the rest of @tastic/core stays
-// real), so the wiring RootLayout hands them can be read straight off their props: Lock Orientation
-// is app-wide (freezeWhileLocked), restored from Redux together with its locked angle, and whatever
-// the provider reports through onLockChange lands back in Redux.
-jest.mock('@tastic/core', () => ({
-  ...jest.requireActual('@tastic/core'),
-  OrientationProvider: jest.fn((props: any) => props.children),
-  RotationAwareStatusBar: jest.fn(() => null)
-}))
+// Only OrientationProvider is stubbed and useRotationAwareStatusBar spied on (the rest of
+// @tastic/core stays real), so the wiring RootLayout hands them can be read straight off their
+// props and arguments: Lock Orientation is app-wide (freezeWhileLocked), restored from Redux
+// together with its locked angle, and whatever the provider reports through onLockChange lands back
+// in Redux.
+jest.mock('@tastic/core', () => {
+  const actual = jest.requireActual('@tastic/core')
+  return {
+    ...actual,
+    OrientationProvider: jest.fn((props: any) => props.children),
+    useRotationAwareStatusBar: jest.fn((...args: unknown[]) => actual.useRotationAwareStatusBar(...args))
+  }
+})
 
 const mockOrientationProvider = OrientationProvider as unknown as jest.Mock
-const mockRotationAwareStatusBar = RotationAwareStatusBar as unknown as jest.Mock
+const mockUseRotationAwareStatusBar = useRotationAwareStatusBar as unknown as jest.Mock
 const latestOrientationProps = () => mockOrientationProvider.mock.calls[mockOrientationProvider.mock.calls.length - 1][0]
 
 // The mocked Providers above hands every render the one real `store`, so each test starts from the
@@ -58,7 +66,9 @@ const latestOrientationProps = () => mockOrientationProvider.mock.calls[mockOrie
 afterEach(() => {
   store.dispatch(settingsActions.initialize({ ...DEFAULT_SETTINGS, lockedRotation: undefined }))
   mockOrientationProvider.mockClear()
-  mockRotationAwareStatusBar.mockClear()
+  mockUseRotationAwareStatusBar.mockClear()
+  mockStack.mockClear()
+  mockStackScreen.mockClear()
 })
 
 describe('RootLayout', () => {
@@ -113,9 +123,20 @@ describe('RootLayout orientation lock wiring', () => {
     expect(store.getState().settings.lockedRotation).toBeUndefined()
   })
 
-  it('renders RotationAwareStatusBar with no per-call-site lock', async () => {
+  it('sets the status bar through the root Stack, with no per-call-site lock', async () => {
     await render(<RootLayout />)
-    expect(mockRotationAwareStatusBar).toHaveBeenCalled()
-    expect(mockRotationAwareStatusBar.mock.calls[0][0]).toEqual({})
+    expect(mockUseRotationAwareStatusBar).toHaveBeenCalled()
+    expect(mockUseRotationAwareStatusBar.mock.calls[0]).toEqual([])
+    // Portrait (the jest default): shown, and no style forced over the native default.
+    const screenOptions = mockStack.mock.calls[mockStack.mock.calls.length - 1][0].screenOptions
+    expect(screenOptions.statusBarHidden).toBe(false)
+    expect(screenOptions).not.toHaveProperty('statusBarStyle')
+  })
+
+  it('hides the status bar on /game whatever the angle, and only there', async () => {
+    await render(<RootLayout />)
+    const screens = mockStackScreen.mock.calls.map(([props]) => props)
+    expect(screens.find((screen) => screen.name === 'game').options).toEqual({ statusBarHidden: true })
+    expect(screens.filter((screen) => screen.options?.statusBarHidden)).toHaveLength(1)
   })
 })

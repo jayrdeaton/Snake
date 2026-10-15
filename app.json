@@ -74,8 +74,8 @@
         }
       ],
       "@tastic/edge-guard",
-      "expo-status-bar",
-      "@tastic/core"
+      "@tastic/core",
+      "./plugins/withSceneDelegate"
     ],
     "extra": {
       "router": {},

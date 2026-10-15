@@ -41,6 +41,11 @@ export const SNAKE_CELL_PX: Record<SnakeGridSizeTier, number> = {
 // wide board.
 export const MAX_BOARD_CONTENT_WIDTH = 1000
 
+// Threshold (in CSS px) at or above which web counts as "desktop" rather than phone-shaped - the
+// same 768 AirHockey, BoxHockey and Pong use. There, game.tsx keeps the back/settings chips in the
+// page's top corners for the whole match instead of hiding them while a round is live.
+export const DESKTOP_WEB_MIN_WIDTH = 768
+
 // Onboarding countdown timing - identical values to LightCycles' constants/game.ts (generic UX
 // pacing with no game-specific dependency, so there's no reason for Snake's own countdown to feel
 // differently paced). "3"/"2"/"1" each held for ONBOARDING_COUNTDOWN_STEP_MS, "GO!" held for an

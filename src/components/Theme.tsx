@@ -37,8 +37,11 @@ export const Theme = ({ children }: ThemeProps) => {
 
   const bridgeProps = useThemeBridgeProps({ initialValue: settings, onChange, onReady })
 
+  // statusBar={false}: auto-paper renders no React Native StatusBar (here or in Appbar.Header). The
+  // status bar is set per screen (_layout.tsx's useRotationAwareStatusBar), and with @tastic/core's
+  // config plugin on, a mounted StatusBar logs an error (a red box in a dev build).
   return (
-    <Provider {...bridgeProps} expoBlur={ExpoBlur} fontFamily={DISPLAY_FONT_FAMILY}>
+    <Provider {...bridgeProps} expoBlur={ExpoBlur} fontFamily={DISPLAY_FONT_FAMILY} statusBar={false}>
       {children}
     </Provider>
   )

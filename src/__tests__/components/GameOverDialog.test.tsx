@@ -3,9 +3,15 @@ import { fireEvent, render, screen } from '@testing-library/react-native'
 import { GameOverDialog, type GameOverSeatResult } from '@/components/GameOverDialog'
 import { ACHIEVEMENT_CATALOG } from '@/constants/achievements'
 
-jest.mock('@rific/auto-paper', () => ({
-  useAutoPaperTheme: () => ({ dark: false, colors: { primary: '#00AA00', secondary: '#AAAA00', onPrimary: '#FFFFFF', onSecondary: '#000000' } })
-}))
+jest.mock('@rific/auto-paper', () => {
+  const { View: MockView } = require('react-native')
+  return {
+    // @tastic/hud's OverlayCard draws on auto-paper's BlurView and reads the Blur setting with useBlur.
+    BlurView: ({ children }: { children?: React.ReactNode }) => <MockView>{children}</MockView>,
+    useAutoPaperTheme: () => ({ dark: false, colors: { primary: '#00AA00', secondary: '#AAAA00', onPrimary: '#FFFFFF', onSecondary: '#000000' } }),
+    useBlur: () => false
+  }
+})
 
 jest.mock('@rific/feedback-press', () => {
   const { Pressable, Text: MockText } = require('react-native')

@@ -226,6 +226,10 @@ export interface Settings {
   // Providers.tsx's EdgeGuardBridge) for @tastic/edge-guard's own config plugin swizzle to read at
   // runtime.
   deferBottomEdgeGestures: boolean
+  // Keep Awake (Settings dialog): keeps the screen from dimming and locking while /game is up (see
+  // game.tsx). On by default, unlike Edge Guard: a screen that locks mid-match hits every player,
+  // not just the few who'd go looking for a fix.
+  keepAwake: boolean
   // /loadout's own per-seat control-scheme picker (web only, see PlayerSetupPanel's
   // showControlScheme). Per seat rather than on Profile (unlike LightCycles' Profile.keyScheme)
   // since Snake's Profile is the shared @tastic/profile package's own type as-is (see

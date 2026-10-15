@@ -6,10 +6,10 @@ import { computeContentBounds, FakeLandscapeView, getFixedZoneRotation, getViewR
 import { computeGridSize } from '@tastic/grid'
 import { type AchievementUnlockOwner, ConfirmDialog, useQuitConfirmation } from '@tastic/hud'
 import { needsSharedNeutralZone } from '@tastic/split-screen'
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { useLocalSearchParams } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Platform, StyleSheet, View } from 'react-native'
 import { Text } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useDispatch, useSelector } from 'react-redux'
@@ -22,7 +22,7 @@ import { SnakeBoard } from '@/components/SnakeBoard'
 import { SnakePowerupHud } from '@/components/SnakePowerupHud'
 import TouchInputLayer, { TouchInputMode } from '@/components/TouchInputLayer'
 import { ACHIEVEMENT_TIER_COLORS } from '@/constants/achievements'
-import { MAX_BOARD_CONTENT_WIDTH, SNAKE_CELL_PX, SNAKE_GAME_OVER_DIALOG_HOLD_MS, snakeDeathFadeMs } from '@/constants/snake'
+import { DESKTOP_WEB_MIN_WIDTH, MAX_BOARD_CONTENT_WIDTH, SNAKE_CELL_PX, SNAKE_GAME_OVER_DIALOG_HOLD_MS, snakeDeathFadeMs } from '@/constants/snake'
 import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
@@ -142,6 +142,19 @@ export default function GameScreen() {
   // only the Paused dialog's Resume clears - see @tastic/core's useBackgroundPause. Skipped once the
   // match is over, or while a dialog already holds the pause by itself.
   const { backgroundPaused, resume } = useBackgroundPause(() => phase !== 'gameOver' && !settingsOpen && !confirmVisible)
+  // Keeps the screen from dimming and locking while a match is up, unless Keep Awake is off in
+  // Settings (read live, so the toggle applies mid-match). Expo only does this by itself in
+  // development builds, and the OS auto-lock only counts screen touches, so tilt or keyboard steering,
+  // or watching the CPU, could let a release build lock mid-match. Failures are dropped: a browser
+  // without the Screen Wake Lock API (or one that refuses it) just keeps its own timeout.
+  const keepAwake = useSelector((state: RootState) => state.settings.keepAwake)
+  useEffect(() => {
+    if (!keepAwake) return undefined
+    activateKeepAwakeAsync('game').catch(() => {})
+    return () => {
+      deactivateKeepAwake('game').catch(() => {})
+    }
+  }, [keepAwake])
   const paused = settingsOpen || confirmVisible || backgroundPaused
 
   const { state, turn, activate, beginPlaying, retry, tickIntervalMs } = useSnakeState(grid, mode, roundSettings, cpuDifficulty, colors, cellPx, safeAreaInsetsPx, paused)
@@ -372,8 +385,12 @@ export default function GameScreen() {
   // fade takes longer, rather than revealing the dialog over a still-fading loser.
   const [showGameOverDialog, setShowGameOverDialog] = useState(false)
 
+  // On a desktop-web page (web, at least DESKTOP_WEB_MIN_WIDTH wide) the chips stay up in the page's
+  // top corners for the whole match, so there's always a way out or into Settings; either dialog
+  // pauses play (see `paused` above). Anywhere narrower they only show before and after a round.
+  const isDesktopWeb = Platform.OS === 'web' && width >= DESKTOP_WEB_MIN_WIDTH
   // Same condition GameActionChips' own showBack/showSettings use below.
-  const controlsVisible = phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)
+  const controlsVisible = isDesktopWeb || phase === 'onboarding' || (phase === 'gameOver' && showGameOverDialog)
 
   // Mirrors phase === 'playing' into Redux (liveplaySlice - see its own doc) rather than calling
   // @tastic/edge-guard's useEdgeGestureGuard directly here: that hook stays mounted once at the app
@@ -481,11 +498,9 @@ export default function GameScreen() {
     )
   return (
     <View style={[styles.root, { backgroundColor: bg }]}>
-      {/* Hidden only here, not on /loadout or the title screen - matches BoxHockey's/LightCycles'/
-      AirHockey's identical per-screen override. Unconditional: hidden for the whole time a round
-      is in progress, for full-screen immersion during actual play. Reverts to whatever
-      _layout.tsx's own RotationAwareStatusBar says the instant this screen unmounts. */}
-      <StatusBar hidden />
+      {/* The OS status bar is hidden on this screen only (_layout.tsx's /game options), not on
+      /loadout or the title screen: for the whole time a round is in progress, for full-screen
+      immersion during actual play. */}
       {/* Explicit top/bottom/left/right edges from insets (not a flex-centered shrink within a
       full-bleed parent) so an asymmetric inset - a landscape notch/Dynamic Island sitting on just
       one side, for instance - still produces a genuinely safe rectangle instead of one that's
@@ -516,7 +531,7 @@ export default function GameScreen() {
       gameOver gating (previously back-only during onboarding) - matches BoxHockey's/AirHockey's/
       Pong's identical always-available back button, so there's a consistent way out of a finished
       round beyond GameOverDialog's own Home button. */}
-      <GameActionChips showBack={controlsVisible} showSettings={controlsVisible} onBack={requestBack} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} />
+      <GameActionChips showBack={controlsVisible} showSettings={controlsVisible} onBack={requestBack} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} desktopWeb={isDesktopWeb} />
       <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={overlayRotation} />
 
       {/* Fleet-shared @tastic/hud ConfirmDialog, matching BoxHockey's/AirHockey's/LightCycles'/
@@ -539,6 +554,9 @@ interface GameActionChipsProps {
   // needsSharedNeutralZone's own doc for why that (not bare orientationMode) is what actually
   // decides whether the neutral slot is needed.
   humanPlayerCount: number
+  // Desktop web always takes the corner layout: both players share one screen, keyboard and mouse
+  // there, so there's no far seat for the neutral edge slots to stay readable from.
+  desktopWeb: boolean
 }
 
 // Back/settings chips. Two structurally different layouts, not just two positions:
@@ -567,7 +585,7 @@ interface GameActionChipsProps {
 // Both branches read the one shared orientation reading, so Lock Orientation (frozen app-wide by
 // _layout.tsx's OrientationProvider) holds both of them still, the neutral branch included: which
 // branch shows, and where, stays put for as long as the lock is on.
-function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlayerCount }: GameActionChipsProps) {
+function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlayerCount, desktopWeb }: GameActionChipsProps) {
   const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
   const insets = useSafeAreaInsets()
   const { dark } = useAutoPaperTheme()
@@ -576,7 +594,7 @@ function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlay
 
   if (!showBack && !showSettings) return null
 
-  const neutral = needsSharedNeutralZone(orientationMode, humanPlayerCount)
+  const neutral = !desktopWeb && needsSharedNeutralZone(orientationMode, humanPlayerCount)
 
   if (neutral) {
     const rotation = getFixedZoneRotation(orientationMode, p1OnRight, upsideDown)

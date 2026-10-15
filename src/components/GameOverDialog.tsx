@@ -1,7 +1,7 @@
 import { useAutoPaperTheme } from '@rific/auto-paper'
 import { Button } from '@rific/feedback-press'
 import { getFixedZoneRotation, getOpposingZoneRotation, useOrientationState } from '@tastic/core'
-import { AchievementUnlockList, type AchievementUnlockOwner } from '@tastic/hud'
+import { AchievementUnlockList, type AchievementUnlockOwner, OverlayBackdrop, OverlayCard, useOverlayCardColors } from '@tastic/hud'
 import { StyleSheet, View } from 'react-native'
 import { Icon, Text } from 'react-native-paper'
 
@@ -62,19 +62,15 @@ const SEATS: readonly SnakeId[] = [1, 2]
 // score, best and unlocks, and its own Quit/Retry (either seat's press acts at once, as the single
 // card's does; there is no LightCycles-style Rematch handshake).
 export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHome, outcome, opponentScore, achievementUnlocks, achievementOwners, seatResults, rotation = 0 }: GameOverDialogProps) {
-  const { colors, dark } = useAutoPaperTheme()
+  const { colors } = useAutoPaperTheme()
   // Read unconditionally (hooks can't sit behind the seatResults branch below); only the split
   // branch uses it.
   const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
-  const cardBg = dark ? '#111111' : '#F2F2F2'
-  const cardBorder = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
-  const fg = dark ? '#FFFFFF' : '#000000'
-  const fgMuted = dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'
-  // Home deliberately avoids colors.primary - Retry already renders in that color as the easier-
-  // reach action (see button ordering below, same rationale as RoundOverDialog's own Quit/Rematch
-  // pair) - a neutral gray reads as clearly secondary regardless of theme.
-  const homeBg = dark ? '#2A2A2A' : '#E0E0E0'
-  const homeFg = dark ? '#FFFFFF' : '#000000'
+  const { fg, fgMuted } = useOverlayCardColors()
+  // Quit is outlined, the fleet's secondary action (ConfirmDialog's Cancel), so Retry is the one
+  // filled button and the easier reach (see button ordering below, same as LightCycles'
+  // RoundOverDialog Quit/Rematch pair). It used to be a fixed gray fill, which stopped matching once
+  // the card took the theme's tinted surface.
 
   if (seatResults) {
     // OnboardingOverlay's two-zone split and rotations exactly (face-to-face: snake 1 near/bottom,
@@ -92,7 +88,7 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
       const { text, icon, color } = result.outcome === 'win' ? { color: result.color, icon: 'trophy', text: 'YOU WIN!' } : result.outcome === 'draw' ? { color: fgMuted, icon: 'handshake-outline', text: 'DRAW' } : { color: fgMuted, icon: 'skull-outline', text: 'YOU LOSE!' }
       const unlocked = achievementUnlocks?.[seat]
       return (
-        <View style={[styles.zoneCard, { backgroundColor: cardBg, borderColor: cardBorder }, cardRotation % 360 !== 0 && { transform: [{ rotate: `${cardRotation}deg` }] }]}>
+        <OverlayCard style={[styles.zoneCard, cardRotation % 360 !== 0 && { transform: [{ rotate: `${cardRotation}deg` }] }]}>
           <Icon source={icon} size={28} color={color} />
           <Text variant='headlineSmall' style={[styles.title, { color }]}>
             {text}
@@ -140,21 +136,21 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
           )}
           {/* Quit before Retry: this card is rotated to face its own seat, which puts the button
           authored LAST nearest that player's hands, same as the single card below. */}
-          <Button mode='contained' onPress={onHome} style={styles.zoneButton} labelStyle={styles.zoneButtonLabel} buttonColor={homeBg} textColor={homeFg}>
+          <Button mode='outlined' onPress={onHome} style={styles.zoneButton} labelStyle={styles.zoneButtonLabel}>
             Quit
           </Button>
           <Button mode='contained' onPress={onRetry} style={styles.zoneButton} labelStyle={styles.zoneButtonLabel} buttonColor={result.color} textColor={onColors[seat]}>
             Retry
           </Button>
-        </View>
+        </OverlayCard>
       )
     }
 
     return (
-      <View style={styles.overlay}>
+      <OverlayBackdrop>
         <View style={[styles.zone, snake1Zone, { borderColor: seatResults[1].color, backgroundColor: `${seatResults[1].color}22` }]}>{renderCard(1, snake1Rotation)}</View>
         <View style={[styles.zone, snake2Zone, { borderColor: seatResults[2].color, backgroundColor: `${seatResults[2].color}22` }]}>{renderCard(2, snake2Rotation)}</View>
-      </View>
+      </OverlayBackdrop>
     )
   }
 
@@ -162,8 +158,8 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
   const { text, icon, color } = solo ? { color: fgMuted, icon: 'skull-outline', text: 'GAME OVER' } : outcome === 'win' ? { color: colors.primary, icon: 'trophy', text: 'YOU WIN!' } : outcome === 'draw' ? { color: fgMuted, icon: 'handshake-outline', text: 'DRAW' } : { color: fgMuted, icon: 'skull-outline', text: 'YOU LOSE!' }
 
   return (
-    <View style={styles.overlay}>
-      <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }, rotation % 360 !== 0 && { transform: [{ rotate: `${rotation}deg` }] }]}>
+    <OverlayBackdrop>
+      <OverlayCard style={rotation % 360 !== 0 && { transform: [{ rotate: `${rotation}deg` }] }}>
         <Icon source={icon} size={64} color={color} />
         <Text variant='headlineLarge' style={[styles.title, { color }]}>
           {text}
@@ -214,14 +210,14 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
         {/* Home listed before Retry: both buttons render bottom-most in the card, so the LAST one
         authored lands nearest a thumb reaching up from the bottom of the screen - same ordering
         rationale as RoundOverDialog's own Quit-before-Rematch pair. */}
-        <Button mode='contained' onPress={onHome} style={styles.button} buttonColor={homeBg} textColor={homeFg}>
+        <Button mode='outlined' onPress={onHome} style={styles.button}>
           Quit
         </Button>
         <Button mode='contained' onPress={onRetry} style={styles.button} buttonColor={colors.primary} textColor={colors.onPrimary}>
           Retry
         </Button>
-      </View>
-    </View>
+      </OverlayCard>
+    </OverlayBackdrop>
   )
 }
 
@@ -235,29 +231,11 @@ const styles = StyleSheet.create({
   },
   achievementList: { maxWidth: 260 },
   button: { width: 160 },
-  card: {
-    alignItems: 'center',
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 16,
-    maxWidth: 360,
-    padding: 32
-  },
   highScoreBadge: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 4,
     marginTop: -8
-  },
-  overlay: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    bottom: 0,
-    justifyContent: 'center',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0
   },
   scoreColumn: {
     alignItems: 'center',
@@ -287,9 +265,7 @@ const styles = StyleSheet.create({
   // Claws back react-native-paper's default label margin so a full card fits half a short screen.
   zoneButtonLabel: { marginVertical: 4 },
   zoneCard: {
-    alignItems: 'center',
     borderRadius: 16,
-    borderWidth: 1,
     gap: 6,
     padding: 14
   },
