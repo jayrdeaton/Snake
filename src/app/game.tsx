@@ -337,8 +337,10 @@ export default function GameScreen() {
 
     // Each human seat's own unlocks plus the device-wide ones that are really that seat's (all of
     // them for a guest, only scope: 'device' ones for a profile; see @tastic/achievements'
-    // broadcastDeviceUnlocks), same as LightCycles. A round where nothing unlocked comes back as {}.
-    const seatUnlocks = broadcastDeviceUnlocks(humanPlayers, unlocked.profiles, unlocked.device, profileIds)
+    // broadcastDeviceUnlocks), same as LightCycles. In 2 Player the device-wide ones go to the
+    // round's winner only, both seats on a draw (audit F037). A round where nothing unlocked comes
+    // back as {}.
+    const seatUnlocks = broadcastDeviceUnlocks(humanPlayers, unlocked.profiles, unlocked.device, profileIds, { winners: mode === 'twoPlayer' && winner !== null ? [winner] : undefined })
 
     // 2 Player: both seats are human and physically opposite each other, so each seat's
     // GameOverDialog card shows its own list. Solo/Vs CPU never populate this (see
