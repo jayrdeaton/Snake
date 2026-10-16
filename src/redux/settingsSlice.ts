@@ -14,9 +14,10 @@ export const DEFAULT_SETTINGS: Settings = {
   lockOrientation: false,
   deferBottomEdgeGestures: false,
   keepAwake: true,
-  // Asymmetric defaults (not both 'mouse') so two seats sharing one desktop's keyboard/mouse don't
-  // start out colliding, mirroring LightCycles' own asymmetric {1:'wasd',2:'arrows'} default.
-  controlScheme: { 1: 'mouse', 2: 'wasd' },
+  // Two key schemes, the same as LightCycles: WASD for player 1 (the left half of a wide desktop
+  // window) and the arrows for player 2 (the right half). Not 'mouse': mouse drag steers every seat
+  // whatever its scheme (TouchInputLayer is always on), so a 'mouse' seat only loses its keys.
+  controlScheme: { 1: 'wasd', 2: 'arrows' },
   speedTier: 'normal',
   arenaVariant: 'open',
   enabledPowerups: [],

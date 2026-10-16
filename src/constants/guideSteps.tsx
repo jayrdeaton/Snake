@@ -40,8 +40,8 @@ interface GuideStepsInput {
   // A touch screen vs. a desktop browser: a phone steers by swiping, a desktop by mouse or key.
   touch: boolean
   // Each seat's live control scheme (settings.controlScheme), only read on desktop. Seats pick
-  // their own in /loadout, and seat 1 defaults to 'mouse', so a replayed guide has to name the real
-  // ones, not assume keys.
+  // their own in /loadout, any of them 'mouse', so a replayed guide has to name the real ones, not
+  // assume keys.
   controls: Record<SnakeId, ControlScheme>
 }
 

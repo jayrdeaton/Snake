@@ -5,7 +5,7 @@ import { getGuideSteps } from '@/constants/guideSteps'
 import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { ControlScheme, SnakeId } from '@/types'
 
-// The settings' own default: seat 1 on the mouse, seat 2 on WASD.
+// The settings' own default: seat 1 on WASD, seat 2 on the arrow keys.
 const DEFAULT_CONTROLS = DEFAULT_SETTINGS.controlScheme
 const SCHEMES: ControlScheme[] = ['mouse', 'wasd', 'arrows', 'ijkl', 'numpad']
 // Every combination, including a same-scheme pair: setControlScheme now swaps on conflict, but a
@@ -72,8 +72,18 @@ describe('getGuideSteps', () => {
     }
   })
 
-  it("teaches a mouse seat to drag (seat 1's default), with hud's mouse SwipeHint", () => {
+  it('teaches the default desktop setup as two keyboard seats, WASD and the arrow keys', () => {
     const [steer, , twoPlayer] = getGuideSteps({ touch: false, controls: DEFAULT_CONTROLS })
+
+    expect(steer.body).toBe('Press a direction key and your snake turns that way.')
+    expect((steer.art as ReactElement).type).toBe(DirectionKeysHint)
+    expect((steer.art as ReactElement<{ labels?: unknown }>).props.labels).toEqual({ up: 'W', left: 'A', down: 'S', right: 'D' })
+    expect(twoPlayer.title).toBe('Two Players, One Keyboard')
+    expect(twoPlayer.body).toBe('Player 1 uses WASD, player 2 uses the arrow keys. Change them before a match.')
+  })
+
+  it("teaches a mouse seat to drag, with hud's mouse SwipeHint", () => {
+    const [steer, , twoPlayer] = getGuideSteps({ touch: false, controls: { 1: 'mouse', 2: 'wasd' } })
 
     expect(steer.body).toMatch(/^Drag the mouse/)
     expect((steer.art as ReactElement).type).toBe(SwipeHint)
@@ -103,6 +113,7 @@ describe('getGuideSteps', () => {
     const [, , twoPlayer] = getGuideSteps({ touch: false, controls: DEFAULT_CONTROLS })
 
     expect((twoPlayer.art as ReactElement).type).toBe(SeatDevicesHint)
+    expect(devices(DEFAULT_CONTROLS)).toEqual(['keyboard', 'keyboard'])
     expect(devices({ 1: 'mouse', 2: 'wasd' })).toEqual(['mouse', 'keyboard'])
     expect(devices({ 1: 'numpad', 2: 'mouse' })).toEqual(['keyboard', 'mouse'])
     expect(devices({ 1: 'ijkl', 2: 'arrows' })).toEqual(['keyboard', 'keyboard'])
