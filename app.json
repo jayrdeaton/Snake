@@ -2,7 +2,7 @@
   "expo": {
     "name": "Snake",
     "slug": "Snake",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "scheme": "snake",
     "description": "A classic Snake game with Solo, Vs CPU, and local 2-player pass-and-play modes.",
     "orientation": "portrait",
