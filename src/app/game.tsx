@@ -607,7 +607,7 @@ function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlay
       <>
         {showBack && (
           <View style={backSlot}>
-            <IconButton icon='arrow-left' iconColor={fg} containerColor={chipBg} style={[styles.chipButton, chipRotation]} size={24} onPress={onBack} />
+            <IconButton icon='arrow-left' iconColor={fg} containerColor={chipBg} style={[styles.chipButton, chipRotation]} size={24} onPress={onBack} accessibilityLabel='Back' />
           </View>
         )}
         {showSettings && (
@@ -626,7 +626,7 @@ function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlay
     <FakeLandscapeView style={[StyleSheet.absoluteFill, styles.cornerChipsWrap]}>
       {showBack && (
         <View style={[styles.cornerSlot, { top: 8 + cornerInsets.top, left: 8 + cornerInsets.left }]}>
-          <IconButton icon='arrow-left' iconColor={fg} containerColor={chipBg} style={styles.chipButton} size={24} onPress={onBack} />
+          <IconButton icon='arrow-left' iconColor={fg} containerColor={chipBg} style={styles.chipButton} size={24} onPress={onBack} accessibilityLabel='Back' />
         </View>
       )}
       {showSettings && (
