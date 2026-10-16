@@ -442,7 +442,7 @@ function buildBodySegments(points: Point[], samples: Sample[], cellPx: number, i
     while (startIdx < n - 1 && samples[startIdx + 1].dist <= fromDist) startIdx++
     let endIdx = n - 1
     while (endIdx > 0 && samples[endIdx - 1].dist >= toDist) endIdx--
-    const path = Skia.Path.Make()
+    const path = Skia.PathBuilder.Make()
     path.moveTo(points[startIdx].x, points[startIdx].y)
     // A seam sample (see Sample.seam) starts a brand new, disconnected piece - moveTo to it instead
     // of lineTo-ing through it, or a wrapEdges crossing sitting anywhere in this segment's span
@@ -453,7 +453,7 @@ function buildBodySegments(points: Point[], samples: Sample[], cellPx: number, i
     }
     const midDist = (fromDist + toDist) / 2
     const hw = bodyHalfWidthAt(midDist, total, cellPx, isOutline)
-    segments.push({ path, width: hw * 2, dist: midDist })
+    segments.push({ path: path.detach(), width: hw * 2, dist: midDist })
   }
   return segments
 }
@@ -474,14 +474,14 @@ function buildGrowthStubSegment(points: Point[], samples: Sample[], cellPx: numb
   if (n === 0) return { path: Skia.Path.Make(), width: 0, dist: referenceTotal }
   let startIdx = 0
   while (startIdx < n - 1 && samples[startIdx + 1].dist <= referenceTotal) startIdx++
-  const path = Skia.Path.Make()
+  const path = Skia.PathBuilder.Make()
   path.moveTo(points[startIdx].x, points[startIdx].y)
   for (let i = startIdx + 1; i < n; i++) {
     if (samples[i].seam) path.moveTo(points[i].x, points[i].y)
     else path.lineTo(points[i].x, points[i].y)
   }
   const hw = bodyHalfWidthAt(referenceTotal, referenceTotal, cellPx, isOutline)
-  return { path, width: hw * 2, dist: referenceTotal }
+  return { path: path.detach(), width: hw * 2, dist: referenceTotal }
 }
 
 // How wide the centerline accent reads relative to the body's own current FILL width at that same
@@ -598,13 +598,13 @@ function buildHeadPath(cx: number, cy: number, angle: number, cellPx: number): S
   const backRightCpIn = projectFromHead(cx, cy, angle, -HEAD_THREEQ_CP_FORWARD_RATIO * cellPx, -HEAD_THREEQ_CP_SIDE_RATIO * cellPx)
   const backRightCpOut = projectFromHead(cx, cy, angle, -HEAD_QUARTER_CP_FORWARD_RATIO * cellPx, -HEAD_QUARTER_CP_SIDE_RATIO * cellPx)
 
-  const path = Skia.Path.Make()
+  const path = Skia.PathBuilder.Make()
   path.moveTo(nose.x, nose.y)
   path.cubicTo(noseCpOut.x, noseCpOut.y, backLeftCpIn.x, backLeftCpIn.y, backLeft.x, backLeft.y)
   path.cubicTo(backLeftCpOut.x, backLeftCpOut.y, backRightCpIn.x, backRightCpIn.y, backRight.x, backRight.y)
   path.cubicTo(backRightCpOut.x, backRightCpOut.y, noseCpIn.x, noseCpIn.y, nose.x, nose.y)
   path.close()
-  return path
+  return path.detach()
 }
 
 // The head's own silhouette again, just smaller - a nested badge continuing the icon's shape
@@ -621,7 +621,7 @@ function buildHeadAccentPath(cx: number, cy: number, angle: number, cellPx: numb
 // fixed screen-aligned X.
 function buildDeadEyesPath(leftX: number, leftY: number, rightX: number, rightY: number, angle: number, armLen: number): SkPath {
   'worklet'
-  const path = Skia.Path.Make()
+  const path = Skia.PathBuilder.Make()
   const centers: [number, number][] = [
     [leftX, leftY],
     [rightX, rightY]
@@ -637,7 +637,7 @@ function buildDeadEyesPath(leftX: number, leftY: number, rightX: number, rightY:
     path.moveTo(c.x, c.y)
     path.lineTo(d.x, d.y)
   }
-  return path
+  return path.detach()
 }
 
 // The tongue: a line from the nose that extends and forks as `progress` goes 0->1 (flicked out) and
@@ -646,8 +646,8 @@ function buildDeadEyesPath(leftX: number, leftY: number, rightX: number, rightY:
 // primitive and this is simpler than one V-shaped polyline sharing a vertex.
 function buildTonguePath(cx: number, cy: number, angle: number, cellPx: number, progress: number): SkPath {
   'worklet'
-  const path = Skia.Path.Make()
-  if (progress <= 0) return path
+  const path = Skia.PathBuilder.Make()
+  if (progress <= 0) return path.detach()
   const nose = projectFromHead(cx, cy, angle, HEAD_NOSE_DIST_RATIO * cellPx, 0)
   const tip = projectFromHead(cx, cy, angle, HEAD_NOSE_DIST_RATIO * cellPx + TONGUE_LENGTH_RATIO * cellPx * progress, 0)
   const forkLen = TONGUE_FORK_LENGTH_RATIO * cellPx * progress
@@ -659,7 +659,7 @@ function buildTonguePath(cx: number, cy: number, angle: number, cellPx: number, 
   path.lineTo(forkA.x, forkA.y)
   path.moveTo(tip.x, tip.y)
   path.lineTo(forkB.x, forkB.y)
-  return path
+  return path.detach()
 }
 
 // The death fade's tail-to-head sweep: `progress` (0->1, see SnakeBody's own deathProgress) is a
@@ -1141,7 +1141,7 @@ function FoodDot({ food, cellPx, phase, color }: FoodDotProps) {
 function wallPath(grid: GridSize, cellPx: number, orientationMode: OrientationMode, p1OnRight: boolean, snakeId: SnakeId): SkPath {
   const width = grid.cols * cellPx
   const height = grid.rows * cellPx
-  const path = Skia.Path.Make()
+  const path = Skia.PathBuilder.Make()
 
   if (orientationMode === 'faceToFace') {
     // Snake 2 is the "far" (top) zone, snake 1 the "near" (bottom) zone - same convention
@@ -1158,7 +1158,7 @@ function wallPath(grid: GridSize, cellPx: number, orientationMode: OrientationMo
       path.lineTo(width, height)
       path.lineTo(width, midY)
     }
-    return path
+    return path.detach()
   }
 
   // Side-by-side: whichever snake is currently on the right gets the right zone - see
@@ -1177,7 +1177,7 @@ function wallPath(grid: GridSize, cellPx: number, orientationMode: OrientationMo
     path.lineTo(width, height)
     path.lineTo(midX, height)
   }
-  return path
+  return path.detach()
 }
 
 // Marks the grid's own actual pixel bounds - without this, there's no way to see where a fatal edge

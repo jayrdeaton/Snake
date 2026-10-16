@@ -153,9 +153,9 @@ interface TrailPathSegment {
 // game trail's sharp turns, which has no equivalent here).
 function loopPath(box: WordBox) {
   const rect = Skia.XYWHRect(box.x + HERO_CANVAS_PAD - HERO_TRAIL_MARGIN_SIDE, box.y + HERO_CANVAS_PAD - HERO_TRAIL_MARGIN_TOP, box.width + HERO_TRAIL_MARGIN_SIDE * 2, box.height + HERO_TRAIL_MARGIN_TOP + HERO_TRAIL_MARGIN_BOTTOM)
-  const path = Skia.Path.Make()
+  const path = Skia.PathBuilder.Make()
   path.addRRect(Skia.RRectXY(rect, HERO_TRAIL_CORNER_RADIUS, HERO_TRAIL_CORNER_RADIUS))
-  return path
+  return path.detach()
 }
 
 // A point `forward` along `angle` from (cx, cy), offset `side` further along the perpendicular -
@@ -185,13 +185,13 @@ function buildHeadPath(cx: number, cy: number, angle: number, unit: number) {
   const backRightCpIn = projectFromHead(cx, cy, angle, -HEAD_THREEQ_CP_FORWARD_RATIO * unit, -HEAD_THREEQ_CP_SIDE_RATIO * unit)
   const backRightCpOut = projectFromHead(cx, cy, angle, -HEAD_QUARTER_CP_FORWARD_RATIO * unit, -HEAD_QUARTER_CP_SIDE_RATIO * unit)
 
-  const path = Skia.Path.Make()
+  const path = Skia.PathBuilder.Make()
   path.moveTo(nose.x, nose.y)
   path.cubicTo(noseCpOut.x, noseCpOut.y, backLeftCpIn.x, backLeftCpIn.y, backLeft.x, backLeft.y)
   path.cubicTo(backLeftCpOut.x, backLeftCpOut.y, backRightCpIn.x, backRightCpIn.y, backRight.x, backRight.y)
   path.cubicTo(backRightCpOut.x, backRightCpOut.y, noseCpIn.x, noseCpIn.y, nose.x, nose.y)
   path.close()
-  return path
+  return path.detach()
 }
 
 // The tongue: a line from the nose that extends and forks as `progress` goes 0->1 (flicked out) and
@@ -200,8 +200,8 @@ function buildHeadPath(cx: number, cy: number, angle: number, unit: number) {
 // than one stroke that splits, since SkPath has no native "fork" primitive.
 function buildTonguePath(cx: number, cy: number, angle: number, unit: number, progress: number): SkPath {
   'worklet'
-  const path = Skia.Path.Make()
-  if (progress <= 0) return path
+  const path = Skia.PathBuilder.Make()
+  if (progress <= 0) return path.detach()
   const nose = projectFromHead(cx, cy, angle, HEAD_NOSE_DIST_RATIO * unit, 0)
   const tip = projectFromHead(cx, cy, angle, HEAD_NOSE_DIST_RATIO * unit + TONGUE_LENGTH_RATIO * unit * progress, 0)
   const forkLen = TONGUE_FORK_LENGTH_RATIO * unit * progress
@@ -213,7 +213,7 @@ function buildTonguePath(cx: number, cy: number, angle: number, unit: number, pr
   path.lineTo(forkA.x, forkA.y)
   path.moveTo(tip.x, tip.y)
   path.lineTo(forkB.x, forkB.y)
-  return path
+  return path.detach()
 }
 
 // Densifies one [fromFrac, toFrac] window of the loop's own contour (always increasing - the
@@ -303,12 +303,12 @@ function buildTrailBodySegments(points: Point[], samples: Sample[], isOutline: b
     while (startIdx < n - 1 && samples[startIdx + 1].dist <= fromDist) startIdx++
     let endIdx = n - 1
     while (endIdx > 0 && samples[endIdx - 1].dist >= toDist) endIdx--
-    const path = Skia.Path.Make()
+    const path = Skia.PathBuilder.Make()
     path.moveTo(points[startIdx].x, points[startIdx].y)
     for (let i = startIdx + 1; i <= endIdx; i++) path.lineTo(points[i].x, points[i].y)
     const midDist = (fromDist + toDist) / 2
     const hw = trailHalfWidthAt(midDist, total, isOutline)
-    segments.push({ path, width: hw * 2 })
+    segments.push({ path: path.detach(), width: hw * 2 })
   }
   return segments
 }
