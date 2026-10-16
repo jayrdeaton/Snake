@@ -1,5 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { Fredoka_600SemiBold } from '@expo-google-fonts/fredoka'
+import MaskedView from '@react-native-masked-view/masked-view'
 import { Provider, themeActions, type ThemeSettings, useThemeBridgeProps } from '@rific/auto-paper'
 import * as ExpoBlur from 'expo-blur'
 import { useFonts } from 'expo-font'
@@ -37,11 +38,14 @@ export const Theme = ({ children }: ThemeProps) => {
 
   const bridgeProps = useThemeBridgeProps({ initialValue: settings, onChange, onReady })
 
+  // maskedView is what lets auto-paper's FadingScrollView fade scrolling rows out at their edges on
+  // iOS/Android (the Settings sheet's and Rules' rows above Done, @tastic/profile's dropdown lists
+  // above Manage); without it they just scroll with a hard edge. Web needs nothing.
   // statusBar={false}: auto-paper renders no React Native StatusBar (here or in Appbar.Header). The
   // status bar is set per screen (_layout.tsx's useRotationAwareStatusBar), and with @tastic/core's
   // config plugin on, a mounted StatusBar logs an error (a red box in a dev build).
   return (
-    <Provider {...bridgeProps} expoBlur={ExpoBlur} fontFamily={DISPLAY_FONT_FAMILY} statusBar={false}>
+    <Provider {...bridgeProps} expoBlur={ExpoBlur} maskedView={MaskedView} fontFamily={DISPLAY_FONT_FAMILY} statusBar={false}>
       {children}
     </Provider>
   )
