@@ -622,8 +622,12 @@ function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlay
   const cornerRotation = getViewRotation(orientationMode, p1OnRight, upsideDown)
   const cornerInsets = rotateInsets(insets, cornerRotation)
 
+  // passThrough: this full-bleed frame only exists to give the two corner slots something to rotate,
+  // so it must never swallow the board's touches or the result card's buttons beneath it. A
+  // `pointerEvents: 'box-none'` style can't do that: FakeLandscapeView hands the style to its inner
+  // View, and react-native-web drops it there, which left the whole frame clickable on web.
   return (
-    <FakeLandscapeView style={[StyleSheet.absoluteFill, styles.cornerChipsWrap]}>
+    <FakeLandscapeView passThrough style={StyleSheet.absoluteFill}>
       {showBack && (
         <View style={[styles.cornerSlot, { top: 8 + cornerInsets.top, left: 8 + cornerInsets.left }]}>
           <IconButton icon='arrow-left' iconColor={fg} containerColor={chipBg} style={styles.chipButton} size={24} onPress={onBack} accessibilityLabel='Back' />
@@ -643,10 +647,6 @@ const styles = StyleSheet.create({
   boardArea: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'absolute' },
   boardAreaFullBleed: { bottom: 0, left: 0, right: 0, top: 0 },
   chipButton: { margin: 0 },
-  // box-none: this full-bleed wrapper only exists to give FakeLandscapeView something to rotate -
-  // it must never itself swallow the board's own touches in the (mostly empty) space between the
-  // two corner slots below.
-  cornerChipsWrap: { pointerEvents: 'box-none' },
   cornerSlot: { position: 'absolute' },
   // Face-to-face: full screen height at a fixed left/right edge, button centered vertically via
   // justifyContent - lands exactly on the horizontal 50/50 zone split (see OnboardingOverlay's own
