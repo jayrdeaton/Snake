@@ -32,8 +32,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.infinitetoken.Snake",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "UIViewControllerBasedStatusBarAppearance": false
+        "ITSAppUsesNonExemptEncryption": false
       },
       "icon": {
         "dark": "./assets/images/icon-dark.png",

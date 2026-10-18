@@ -1,8 +1,10 @@
+import { keepAwakeActions, KeepAwakeProvider, type KeepAwakeSettings } from '@rific/core'
 import { FeedbackPressProvider, hapticActions, type HapticSettings, soundActions, type SoundSettings, useFeedbackBridgeProps, useHapticSettings } from '@rific/feedback-press'
 import { scrollViewActions, type ScrollViewSettings, ScrollViewSettingsProvider } from '@rific/scroll-view'
 import { Toaster, ToastProvider } from '@rific/toaster'
 import { useEdgeGestureGuard } from '@tastic/edge-guard'
 import * as Haptics from 'expo-haptics'
+import * as ExpoKeepAwake from 'expo-keep-awake'
 import React, { useCallback } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
@@ -56,6 +58,20 @@ const ScrollViewBridge = ({ children }: Props) => {
   )
 }
 
+// @rific/core's Keep Awake setting (Settings dialog), persisted as the store's `keepAwake` slice.
+// Handing it expo-keep-awake is what turns the feature on: /game's useKeepAwake('game') and hud's
+// Keep Awake row both read the module from here.
+const KeepAwakeBridge = ({ children }: Props) => {
+  const keepAwake = useSelector((state: RootState) => state.keepAwake)
+  const dispatch = useDispatch()
+  const onChange = useCallback((settings: KeepAwakeSettings) => dispatch(keepAwakeActions.initialize(settings)), [dispatch])
+  return (
+    <KeepAwakeProvider expoKeepAwake={ExpoKeepAwake} initialValue={keepAwake} onChange={onChange}>
+      {children}
+    </KeepAwakeProvider>
+  )
+}
+
 // The toaster only gets expo-haptics while the player's Vibrate setting is on, so its haptic ticks
 // follow the same setting as every other haptic in the app. Today they can't fire anyway (the only
 // controls that tick, the history and clear buttons, are off below), but this keeps it that way if
@@ -78,20 +94,22 @@ export const Providers = ({ children }: Props) => {
             <EdgeGuardBridge>
               <FeedbackBridge>
                 <ScrollViewBridge>
-                  <KeyboardProvider>
-                    <Theme>
-                      <HapticGatedToastProvider>
-                        {children}
-                        {/* historyButton/clearButton off - matches AirHockey/BoxHockey/Pong/LightCycles;
-                        limit is already the package's own default (3), pinned explicitly so it stays 3
-                        regardless of what that default does in a future toaster version. No historyModal
-                        - Snake's own history drawer (@rific/drawer-backed) was unreachable dead code now
-                        that historyButton is hidden and nothing calls useToast().openHistory(); removed
-                        along with the @rific/drawer dependency itself. */}
-                        <Toaster historyButton={null} clearButton={null} limit={3} />
-                      </HapticGatedToastProvider>
-                    </Theme>
-                  </KeyboardProvider>
+                  <KeepAwakeBridge>
+                    <KeyboardProvider>
+                      <Theme>
+                        <HapticGatedToastProvider>
+                          {children}
+                          {/* historyButton/clearButton off - matches AirHockey/BoxHockey/Pong/LightCycles;
+                          limit is already the package's own default (3), pinned explicitly so it stays 3
+                          regardless of what that default does in a future toaster version. No historyModal
+                          - Snake's own history drawer (@rific/drawer-backed) was unreachable dead code now
+                          that historyButton is hidden and nothing calls useToast().openHistory(); removed
+                          along with the @rific/drawer dependency itself. */}
+                          <Toaster historyButton={null} clearButton={null} limit={3} />
+                        </HapticGatedToastProvider>
+                      </Theme>
+                    </KeyboardProvider>
+                  </KeepAwakeBridge>
                 </ScrollViewBridge>
               </FeedbackBridge>
             </EdgeGuardBridge>

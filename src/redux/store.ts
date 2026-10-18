@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { combineReducers, configureStore, type Middleware } from '@reduxjs/toolkit'
 import { createThemeReducer, getThirdColor } from '@rific/auto-paper'
+import { keepAwakeReducer } from '@rific/core'
 import { defaultSoundSettings, hapticReducer, soundReducer, type SoundSettings } from '@rific/feedback-press'
 import { scrollViewReducer } from '@rific/scroll-view'
 import { createReturningPlayerMigrate } from '@tastic/hud/guide'
@@ -49,6 +50,9 @@ const rootReducer = combineReducers({
   scrollView: scrollViewReducer,
   haptic: hapticReducer,
   sound: appSoundReducer,
+  // @rific/core's Keep Awake setting (see Providers.tsx's KeepAwakeBridge), under the namespace its
+  // REHYDRATE handling expects.
+  keepAwake: keepAwakeReducer,
   // The persisted settings (see settingsSlice.ts).
   settings,
   // The loadout's per-seat color memory (see seatColorsSlice.ts).
@@ -72,6 +76,10 @@ const rootReducer = combineReducers({
 
 const persistConfig = {
   key: 'root',
+  // On web every Tastic game shares one origin (games.infinitetoken.com) and so one localStorage, where AsyncStorage
+  // keeps this state under keyPrefix + key: the default prefix would make every game's state the same persist:root.
+  // REHYDRATE still reports key 'root', so guideSlice's persistKey is unchanged.
+  keyPrefix: 'snake:',
   storage: AsyncStorage,
   // liveplay is per-round state that must never survive a relaunch (see liveplaySlice.ts).
   blacklist: ['liveplay'],

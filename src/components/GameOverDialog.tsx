@@ -57,8 +57,8 @@ const SEATS: readonly SnakeId[] = [1, 2]
 
 // Styled after LightCycles' RoundOverDialog.tsx. Solo and Vs CPU have one human, so they get its
 // single centered card (icon + text + buttons). 2 Player is simultaneous split-screen, both players
-// at the device at once, often face to face, so it gets the per-seat split instead: one compact card
-// per seat in that seat's own zone, each telling its own player whether they won, with their own
+// at the device at once, often face to face, so it gets the per-seat split instead: one card per
+// seat in that seat's own zone, each telling its own player whether they won, with their own
 // score, best and unlocks, and its own Quit/Retry (either seat's press acts at once, as the single
 // card's does; there is no LightCycles-style Rematch handshake).
 export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHome, outcome, opponentScore, achievementUnlocks, achievementOwners, seatResults, rotation = 0 }: GameOverDialogProps) {
@@ -89,8 +89,8 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
       const unlocked = achievementUnlocks?.[seat]
       return (
         <OverlayCard style={[styles.zoneCard, cardRotation % 360 !== 0 && { transform: [{ rotate: `${cardRotation}deg` }] }]}>
-          <Icon source={icon} size={28} color={color} />
-          <Text variant='headlineSmall' style={[styles.title, { color }]}>
+          <Icon source={icon} size={40} color={color} />
+          <Text variant='headlineMedium' style={[styles.title, { color }]}>
             {text}
           </Text>
           <View style={styles.scoreRow}>
@@ -136,10 +136,10 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
           )}
           {/* Quit before Retry: this card is rotated to face its own seat, which puts the button
           authored LAST nearest that player's hands, same as the single card below. */}
-          <Button mode='outlined' onPress={onHome} style={styles.zoneButton} labelStyle={styles.zoneButtonLabel}>
+          <Button mode='outlined' onPress={onHome} style={styles.button}>
             Quit
           </Button>
-          <Button mode='contained' onPress={onRetry} style={styles.zoneButton} labelStyle={styles.zoneButtonLabel} buttonColor={result.color} textColor={onColors[seat]}>
+          <Button mode='contained' onPress={onRetry} style={styles.button} buttonColor={result.color} textColor={onColors[seat]}>
             Retry
           </Button>
         </OverlayCard>
@@ -249,9 +249,9 @@ const styles = StyleSheet.create({
   // `gap` stacks on top of - clawed back the same way RoundOverDialog's own overlayTitle does.
   soloScore: { fontWeight: 'bold', marginTop: -8 },
   title: { fontWeight: 'bold', marginBottom: -8 },
-  // The per-seat split below matches RoundOverDialog's zone/zoneCard/zoneButton styles. A seat's
-  // zone is half the screen, so the card is compact, and overflow: 'hidden' clips an extreme case
-  // at the zone's edge instead of letting the two cards overlap at the seam.
+  // The per-seat split below matches RoundOverDialog's zone styles. A seat's zone is half the
+  // screen, and overflow: 'hidden' clips an extreme case at the zone's edge instead of letting the
+  // two cards overlap at the seam.
   zone: {
     alignItems: 'center',
     borderStyle: 'dashed',
@@ -261,13 +261,15 @@ const styles = StyleSheet.create({
     position: 'absolute'
   },
   zoneBottom: { bottom: 0, left: 0, right: 0, top: '50%' },
-  zoneButton: { width: 130 },
-  // Claws back react-native-paper's default label margin so a full card fits half a short screen.
-  zoneButtonLabel: { marginVertical: 4 },
+  // A seat's card has the single card's buttons (`button`, Paper's full 40pt height) so each seat
+  // gets the same size target. They used to be 130 wide with the label margin cut to 4 (about 28pt
+  // tall), too small to hit reliably (Jay, 2026-10-17). The rest is trimmed from the single card
+  // (smaller icon, title and gaps) because this card also carries both scores and the best: worst
+  // case, with an achievement badge, it's about 312pt tall, under half of an iPhone SE's 667pt
+  // screen. The single card's own sizes would be about 404pt, more than half of a 375x812 phone.
   zoneCard: {
-    borderRadius: 16,
-    gap: 6,
-    padding: 14
+    gap: 8,
+    padding: 18
   },
   zoneHighScoreBadge: {
     alignItems: 'center',

@@ -26,9 +26,9 @@
           "pass and play",
           "offline"
         ],
-        "marketingUrl": "https://snake.infinitetoken.com",
-        "supportUrl": "https://infinitetoken.com",
-        "privacyPolicyUrl": "https://snake.infinitetoken.com/privacy"
+        "marketingUrl": "https://games.infinitetoken.com/snake",
+        "supportUrl": "https://games.infinitetoken.com/support",
+        "privacyPolicyUrl": "https://games.infinitetoken.com/privacy"
       }
     },
     "advisory": {

@@ -3,13 +3,21 @@
 // `export const Skia = JsiSkApi(global.CanvasKit)`). SnakeBoardCanvas.tsx imports `Skia` at its
 // own top level, so if that module is ever required before CanvasKit's wasm binary has loaded,
 // `Skia` is permanently bound to `undefined` - no amount of gating the render afterwards fixes
-// it, because the binding already happened. `WithSkiaWeb` sidesteps this the way Shopify's docs
-// say to: `getComponent` is a *dynamic* import, so SnakeBoardCanvas.tsx isn't required (and Skia
-// isn't bound) until after `LoadSkiaWeb()` - which WithSkiaWeb calls first - has resolved.
-import { WithSkiaWeb } from '@shopify/react-native-skia/lib/module/web'
+// it, because the binding already happened. A dynamic import is the one thing that defers module
+// evaluation to runtime, so SnakeBoardCanvas.tsx (and therefore Skia) is only imported after
+// hud's loadSkiaWeb() has resolved and set global.CanvasKit for real. The lazy component is
+// created once, at module scope, so its identity never changes between renders.
+import { loadSkiaWeb } from '@tastic/hud/skia'
+import { lazy, Suspense } from 'react'
 
 import type { SnakeBoardProps } from './SnakeBoardCanvas'
 
+const LazySnakeBoard = lazy(() => loadSkiaWeb().then(() => import('./SnakeBoardCanvas').then((m) => ({ default: m.SnakeBoard }))))
+
 export function SnakeBoard(props: SnakeBoardProps) {
-  return <WithSkiaWeb<SnakeBoardProps> getComponent={() => import('./SnakeBoardCanvas').then((m) => ({ default: m.SnakeBoard }))} componentProps={props} />
+  return (
+    <Suspense fallback={null}>
+      <LazySnakeBoard {...props} />
+    </Suspense>
+  )
 }

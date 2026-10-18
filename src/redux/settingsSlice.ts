@@ -13,7 +13,6 @@ export const DEFAULT_SETTINGS: Settings = {
   cpuDifficulty: null,
   lockOrientation: false,
   deferBottomEdgeGestures: false,
-  keepAwake: true,
   // Two key schemes, the same as LightCycles: WASD for player 1 (the left half of a wide desktop
   // window) and the arrows for player 2 (the right half). Not 'mouse': mouse drag steers every seat
   // whatever its scheme (TouchInputLayer is always on), so a 'mouse' seat only loses its keys.
