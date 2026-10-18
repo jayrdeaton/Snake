@@ -1,3 +1,4 @@
+import { callWorkletCallback, useWorkletCallback } from '@rific/core'
 import { useVibration } from '@rific/feedback-press'
 import { useOrientationState } from '@tastic/core'
 import { applyControlInversion, isEffectiveTurn } from '@tastic/input'
@@ -76,6 +77,12 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
     onActivate(snakeId)
   }, [])
 
+  // The gesture worklets call these through callWorkletCallback + a key, never runOnJS(handleTurn) directly: react-native-worklets
+  // holds a runOnJS target from native code for as long as the worklet's cached copy lives, and a component callback there
+  // would pin this component (and everything it closes over) in memory forever.
+  const turnKey = useWorkletCallback(handleTurn)
+  const activateKey = useWorkletCallback(handleActivate)
+
   // Per-snake drag state, read/written from the UI-thread gesture worklets below (never touched
   // from JS) so a whole continuous touch can be tracked without bouncing through React state.
   // `base` is the translation (relative to the gesture's own onStart) at which the *current*
@@ -115,7 +122,7 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
           base.value = { x: e.translationX, y: e.translationY }
           if (direction !== lastDirection.value) {
             lastDirection.value = direction
-            runOnJS(handleTurn)(snakeId, direction)
+            runOnJS(callWorkletCallback)(turnKey, snakeId, direction)
           }
         })
 
@@ -132,12 +139,12 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
         .hitSlop({})
         .enabled(enabled)
         .onEnd((_event, success) => {
-          if (success) runOnJS(handleActivate)(snakeId)
+          if (success) runOnJS(callWorkletCallback)(activateKey, snakeId)
         })
 
       return Gesture.Simultaneous(pan, tap)
     },
-    [enabled, handleTurn, handleActivate]
+    [enabled, turnKey, activateKey]
   )
 
   const soloGesture = useMemo(() => (solo ? makeSnakeGesture(1, snake1Base, snake1LastDirection) : null), [solo, makeSnakeGesture]) // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/refs -- snake1Base/snake1LastDirection are stable SharedValue refs (like useRef), not reactive state; SharedValue.value is only ever read inside worklet/event callbacks, never synchronously during render
