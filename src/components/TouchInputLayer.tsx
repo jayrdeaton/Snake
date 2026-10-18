@@ -148,9 +148,9 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
     [enabled, turnKey, activateKey]
   )
 
-  const soloGesture = useMemo(() => (solo ? makeSnakeGesture(1, snake1Base, snake1LastDirection) : null), [solo, makeSnakeGesture]) // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/refs -- snake1Base/snake1LastDirection are stable SharedValue refs (like useRef), not reactive state; SharedValue.value is only ever read inside worklet/event callbacks, never synchronously during render
-  const snake1Gesture = useMemo(() => (solo ? null : makeSnakeGesture(1, snake1Base, snake1LastDirection)), [solo, makeSnakeGesture]) // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/refs -- snake1Base/snake1LastDirection are stable SharedValue refs, not reactive state
-  const snake2Gesture = useMemo(() => (solo ? null : makeSnakeGesture(2, snake2Base, snake2LastDirection)), [solo, makeSnakeGesture]) // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/refs -- snake2Base/snake2LastDirection are stable SharedValue refs, not reactive state
+  const soloGesture = useMemo(() => (solo ? makeSnakeGesture(1, snake1Base, snake1LastDirection) : null), [solo, makeSnakeGesture]) // eslint-disable-line react-hooks/exhaustive-deps -- snake1Base/snake1LastDirection are stable SharedValue refs (like useRef), not reactive state; SharedValue.value is only ever read inside worklet/event callbacks, never synchronously during render
+  const snake1Gesture = useMemo(() => (solo ? null : makeSnakeGesture(1, snake1Base, snake1LastDirection)), [solo, makeSnakeGesture]) // eslint-disable-line react-hooks/exhaustive-deps -- snake1Base/snake1LastDirection are stable SharedValue refs, not reactive state
+  const snake2Gesture = useMemo(() => (solo ? null : makeSnakeGesture(2, snake2Base, snake2LastDirection)), [solo, makeSnakeGesture]) // eslint-disable-line react-hooks/exhaustive-deps -- snake2Base/snake2LastDirection are stable SharedValue refs, not reactive state
 
   if (solo) {
     return (
