@@ -2,7 +2,8 @@ import { useAutoPaperTheme } from '@rific/auto-paper'
 import { getFixedZoneRotation, getOpposingZoneRotation, getViewRotation, useOrientationState } from '@tastic/core'
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import { scheduleOnRN } from 'react-native-worklets'
 
 import { ONBOARDING_COUNTDOWN_STEP_MS, ONBOARDING_FADE_MS, ONBOARDING_GO_HOLD_MS } from '@/constants/snake'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
@@ -66,7 +67,7 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
     const fadeTimer = setTimeout(
       () => {
         opacity.value = withTiming(0, { duration: ONBOARDING_FADE_MS }, (finished) => {
-          if (finished) runOnJS(onComplete)()
+          if (finished) scheduleOnRN(onComplete)
         })
       },
       ONBOARDING_COUNTDOWN_STEP_MS * 3 + ONBOARDING_GO_HOLD_MS

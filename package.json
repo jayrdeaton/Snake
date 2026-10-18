@@ -40,7 +40,7 @@
     "@rific/core": "^0.5.0",
     "@rific/feedback-press": "^0.13.1",
     "@rific/focus-chain": "^0.4.8",
-    "@rific/scroll-view": "^1.1.0",
+    "@rific/scroll-view": "^1.1.1",
     "@rific/splash-gate": "^0.2.3",
     "@rific/toaster": "^0.9.0",
     "@rific/updater": "^0.7.1",
