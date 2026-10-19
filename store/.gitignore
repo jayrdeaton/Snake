@@ -1,0 +1,5 @@
+# App Store screenshots and art (build output), the seed made from the app, and eas metadata:pull output. Kept here, not in
+# the root .gitignore: the root one is part of the Expo fingerprint, so editing it changes the runtime version.
+screenshots/
+seed/seed.json
+apple/
