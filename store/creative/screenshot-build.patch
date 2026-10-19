@@ -1,0 +1,133 @@
+diff --git a/src/app/storeart.tsx b/src/app/storeart.tsx
+new file mode 100644
+index 0000000..e224475
+--- /dev/null
++++ b/src/app/storeart.tsx
+@@ -0,0 +1,51 @@
++// STORE-ART (temporary, App Store header art only, never commit): the real SnakeBoard with two hand-laid snakes, green
++// from the left and yellow from the right, heads two cells either side of one apple in the middle of the header's safe
++// area. Rendered by store/creative/capture-board.mjs at 762 x 327 and a 5.04 pixel ratio.
++import { View } from 'react-native'
++
++import { SnakeBoard } from '@/components/SnakeBoard'
++import type { Direction, GridCell, SnakeEntity, SnakeId } from '@/types'
++import { SNAKE_COLORS } from '@/utils/snakeEngine'
++
++const COLS = 33
++const ROWS = 13
++const CELL = 762 / COLS
++
++function trace(points: GridCell[]): GridCell[] {
++  const cells: GridCell[] = [points[0]]
++  for (let i = 1; i < points.length; i++) {
++    const { x, y } = cells[cells.length - 1]
++    const to = points[i]
++    const dx = Math.sign(to.x - x)
++    const dy = Math.sign(to.y - y)
++    for (let step = 1; step <= Math.abs(to.x - x) + Math.abs(to.y - y); step++) cells.push({ x: x + dx * step, y: y + dy * step })
++  }
++  return cells
++}
++
++const GREEN = trace([
++  { x: 1, y: 11 },
++  { x: 1, y: 2 },
++  { x: 5, y: 2 },
++  { x: 5, y: 10 },
++  { x: 9, y: 10 },
++  { x: 9, y: 3 },
++  { x: 12, y: 3 },
++  { x: 12, y: 6 },
++  { x: 14, y: 6 }
++])
++const YELLOW = GREEN.map(({ x, y }) => ({ x: 32 - x, y: 12 - y }))
++
++function snake(id: SnakeId, body: GridCell[], direction: Direction): SnakeEntity {
++  return { id, body, direction, pendingDirection: null, alive: true, score: body.length - 3, color: SNAKE_COLORS[id], crashCell: null, heldPowerup: null, effects: { speed: null, control: null, shield: null }, peakLength: body.length }
++}
++
++export default function StoreArt() {
++  return (
++    <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center' }}>
++      <View style={{ width: COLS * CELL, height: ROWS * CELL }}>
++        <SnakeBoard snakes={[snake(1, GREEN, 'right'), snake(2, YELLOW, 'left')]} food={{ x: 16, y: 6 }} obstacles={[]} portals={[]} tunnels={[]} pickups={[]} phase='playing' cellPx={CELL} grid={{ cols: COLS, rows: ROWS }} tick={1} tickIntervalMs={110} wrapEdges onboarding={false} />
++      </View>
++    </View>
++  )
++}
+diff --git a/src/hooks/useSnakeState.ts b/src/hooks/useSnakeState.ts
+index 03680ac..b3c29fb 100644
+--- a/src/hooks/useSnakeState.ts
++++ b/src/hooks/useSnakeState.ts
+@@ -1,7 +1,7 @@
+ import { useCallback, useEffect, useRef, useState } from 'react'
+ 
+ import { SNAKE_SPEED_TIER_INTERVAL_MS } from '@/constants/snake'
+-import { Direction, GamePhase, GridSize, SnakeId, SnakeRoundSettings } from '@/types'
++import { Direction, GamePhase, GridCell, GridSize, SnakeEntity, SnakeGameState, SnakeId, SnakeRoundSettings } from '@/types'
+ import { applyCpuSnakePowerupActivation, applyCpuSnakeTurn, CpuDifficulty } from '@/utils/snakeAi'
+ import { applySnakePowerupActivation, applySnakeTurnIntent, createInitialSnakeState, tickSnake } from '@/utils/snakeEngine'
+ 
+@@ -39,6 +39,42 @@ const CPU_SNAKE_ID: SnakeId = 2
+ // cellPx/safeAreaInsetsPx default to 1/all-zero (no margin) - see createInitialSnakeState's own
+ // comment for why: this hook's caller (GameScreen) is what decides whether safeAreaInsetsPx is
+ // actually the device's real insets or zeroed out (see that screen's own fullScreen branch).
++// STORE-AUTOPILOT (temporary, App Store screenshots only, never commit): true once the round is worth a screenshot, so
++// the tick loop holds that exact state. Tightness is the share of body cells touching a part of the body that isn't
++// their neighbor in the chain: low means a loose, spread-out snake rather than tightly packed runs.
++function storeTightness(body: GridCell[]): number {
++  const index = new Map(body.map((c, i) => [`${c.x},${c.y}`, i]))
++  let touching = 0
++  body.forEach((c, i) => {
++    const near = [`${c.x + 1},${c.y}`, `${c.x - 1},${c.y}`, `${c.x},${c.y + 1}`, `${c.x},${c.y - 1}`].some((k) => {
++      const j = index.get(k)
++      return j !== undefined && Math.abs(j - i) > 1
++    })
++    if (near) touching++
++  })
++  return touching / body.length
++}
++function storeAboutToEat(snake: SnakeEntity, food: GridCell): boolean {
++  const head = snake.body[snake.body.length - 1]
++  const d = snake.pendingDirection ?? snake.direction
++  const next = { x: head.x + (d === 'right' ? 1 : d === 'left' ? -1 : 0), y: head.y + (d === 'down' ? 1 : d === 'up' ? -1 : 0) }
++  return next.x === food.x && next.y === food.y
++}
++function storeShotReady(s: SnakeGameState, mode: SnakeMode): boolean {
++  if (s.phase !== 'playing' || s.snakes.some((snake) => !snake.alive)) return false
++  if (mode === 'solo') {
++    const [snake] = s.snakes
++    return snake.body.length >= Math.max(85, Math.round(s.grid.cols * 2.6)) && storeTightness(snake.body) <= 0.25 && storeAboutToEat(snake, s.food)
++  }
++  if (mode !== 'twoPlayer') return false
++  const [a, b] = s.snakes
++  const minLength = Math.max(16, Math.round(s.grid.cols * 0.55))
++  if (a.body.length < minLength || b.body.length < minLength) return false
++  if (storeTightness(a.body) > 0.35 || storeTightness(b.body) > 0.35) return false
++  const gap = Math.min(...a.body.flatMap((p) => b.body.map((q) => Math.abs(p.x - q.x) + Math.abs(p.y - q.y))))
++  return gap >= 6 && (storeAboutToEat(a, s.food) || storeAboutToEat(b, s.food))
++}
++
+ export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRoundSettings, cpuDifficulty: CpuDifficulty, colors?: Partial<Record<SnakeId, string>>, cellPx: number = 1, safeAreaInsetsPx: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 }, paused: boolean = false) {
+   const snakeCount = snakeCountForMode(mode)
+ 
+@@ -130,6 +166,19 @@ export function useSnakeState(grid: GridSize, mode: SnakeMode, settings: SnakeRo
+       if (dt >= tickIntervalMs) {
+         lastTickRef.current = timestamp
+         setState((s) => {
++          // STORE-AUTOPILOT (temporary, App Store screenshots only, never commit)
++          if (process.env.EXPO_PUBLIC_STORE_AUTOPILOT === '1') {
++            if (storeShotReady(s, mode)) return s
++            const humans: SnakeId[] = mode === 'twoPlayer' ? [1, 2] : [1]
++            // In 2 Player each snake only chases food in its own half (seat 1 is the bottom, or the left on a wide board); otherwise it heads for the
++            // mirror-image spot in its own half, the way two people each play their own end.
++            s = humans.reduce((acc, id) => {
++              const wide = acc.grid.cols > acc.grid.rows
++              if (mode !== 'twoPlayer' || (id === 1) === (wide ? acc.food.x < acc.grid.cols / 2 : acc.food.y >= acc.grid.rows / 2)) return applyCpuSnakeTurn(acc, id, 'normal', Math.random)
++              const mirrored = { x: acc.grid.cols - 1 - acc.food.x, y: acc.grid.rows - 1 - acc.food.y }
++              return { ...applyCpuSnakeTurn({ ...acc, food: mirrored }, id, 'normal', Math.random), food: acc.food }
++            }, s)
++          }
+           // Mirrors LightCycles' useGameState.ts inline CPU-turn-injection splice exactly: for
+           // vsCpu, the CPU's activation decision (if any powerups are even enabled) is made and
+           // applied FIRST, immediately before its move for THIS tick is decided and queued - same

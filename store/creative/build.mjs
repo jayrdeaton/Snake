@@ -1,7 +1,7 @@
 // The App Store's product page header and search results art (iOS 27's creative assets, see store/README.md), made from
 // the app's own screens:
-//   header  the live game board at 4K (store/screenshots/raw/header-board.png, from capture-board.mjs), full bleed. No
-//           words: the app's name sits right under it.
+//   header  two snakes and an apple drawn by the app's own board at 4K (store/screenshots/raw/header-board.png, from the
+//           screenshot build's /storeart page via capture-board.mjs), full bleed. No words: the app's name sits under it.
 //   search  "Classic Snake" and the modes beside the Solo screenshot capture (store/screenshots/raw/iphone/01-solo.png)
 //           in a phone, on the screenshots' dark green, in the app's display font.
 //
