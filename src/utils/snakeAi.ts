@@ -19,6 +19,13 @@ export type CpuDifficulty = 'easy' | 'normal' | 'hard'
 // needs to compare candidates against each other, not know the exact count. This file keeps its
 // own constant (rather than importing LightCycles') per the plan's decision to give Snake's AI its
 // own tuning home instead of a cross-project shared constants module.
+//
+// Only the space-scoring fill is capped. The food/pickup distance search (distanceToNearestTarget
+// in chooseCpuSnakeDirection) runs uncapped: capped, any target more than ~900 cells away was
+// invisible, so on a big board (an iPad 13" at the Large grid is about 43 x 57, desktop web more)
+// every direction read as "no food reachable" and the CPU wandered around one corner forever. That
+// search stops at the first target it reaches, so it only walks the whole board when the food is
+// far or walled off, and even then a full desktop board is a few milliseconds per tick.
 export const CPU_FLOOD_FILL_CAP = 900
 
 // Difficulty degrades decision QUALITY only, never reaction speed - the CPU always ticks in step
@@ -181,7 +188,7 @@ export function chooseCpuSnakeDirection({ snake, grid, occupied, difficulty, ran
     const tied = scored.filter((s) => s.space >= 0 && maxSpace - s.space <= tolerance)
     if (tied.length > 1) {
       const ranked = tied
-        .map((s) => ({ direction: s.direction, dist: s.cell ? distanceToNearestTarget(s.cell, grid, occupied, targets, CPU_FLOOD_FILL_CAP, portals, tunnelCellSet, new Set(), wrapAware) : null }))
+        .map((s) => ({ direction: s.direction, dist: s.cell ? distanceToNearestTarget(s.cell, grid, occupied, targets, Infinity, portals, tunnelCellSet, new Set(), wrapAware) : null }))
         .filter((s): s is { direction: Direction; dist: number } => s.dist !== null)
         .sort((a, b) => a.dist - b.dist)
       if (ranked.length > 0) best = ranked[0].direction

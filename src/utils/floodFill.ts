@@ -67,34 +67,76 @@ export function countReachableCells(start: GridCell, grid: GridSize, occupied: R
 // `tunnelCellSet`/`tunnelOccupied` follow its identical isBlocked-routing shape, and `wrapEdges`
 // follows its identical wrap-before-portal-check shape too.
 //
-// Ported verbatim from LightCycles' floodFill.ts - see countReachableCells' own comment above for
-// why the portal/tunnel/wrap params are kept even though Snake's own AI never passes them yet.
+// Started as a port of LightCycles' floodFill.ts, but walks the grid by cell index (typed arrays for
+// visited/blocked/targets/portals) instead of string keys in Sets: snakeAi.ts runs this uncapped,
+// up to three times a tick, and on a full-screen desktop board (about 180 x 100 cells) the string
+// version took around 30ms a tick when the food was walled off. Same results as the string version
+// (pinned by floodFill.test.ts, which keeps it as a reference). Portal entrances are only read for
+// in-bounds cells, which is every portal (see countReachableCells' comment above).
 export function distanceToNearestTarget(start: GridCell, grid: GridSize, occupied: ReadonlySet<string>, targets: ReadonlySet<string>, maxCount: number = Infinity, portals: ReadonlyMap<string, GridCell> = new Map(), tunnelCellSet: ReadonlySet<string> = new Set(), tunnelOccupied: ReadonlySet<string> = new Set(), wrapEdges: boolean = false): number | null {
   const isBlocked = (key: string): boolean => (tunnelCellSet.has(key) ? tunnelOccupied : occupied).has(key)
   if (!isInBounds(start, grid) || isBlocked(cellKey(start))) return null
   if (targets.has(cellKey(start))) return 0
 
-  const visited = new Set<string>([cellKey(start)])
-  const queue: { cell: GridCell; dist: number }[] = [{ cell: start, dist: 0 }]
+  const { cols, rows } = grid
+  const size = cols * rows
+  // Index of an in-bounds "x,y" key, or -1 for anything else.
+  const indexOfKey = (key: string): number => {
+    const comma = key.indexOf(',')
+    const x = Number(key.slice(0, comma))
+    const y = Number(key.slice(comma + 1))
+    return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < cols && y < rows ? y * cols + x : -1
+  }
+
+  const blocked = new Uint8Array(size)
+  for (const key of occupied) if (!tunnelCellSet.has(key)) markIndex(blocked, indexOfKey(key))
+  for (const key of tunnelOccupied) if (tunnelCellSet.has(key)) markIndex(blocked, indexOfKey(key))
+  const isTarget = new Uint8Array(size)
+  for (const key of targets) markIndex(isTarget, indexOfKey(key))
+  // Portal exit for an entrance index, or -1 (also -1 for an exit off the grid, which can't be entered).
+  const portalExit = new Int32Array(size).fill(-1)
+  for (const [key, exit] of portals) {
+    const index = indexOfKey(key)
+    if (index >= 0) portalExit[index] = isInBounds(exit, grid) ? exit.y * cols + exit.x : -2
+  }
+
+  const startIndex = start.y * cols + start.x
+  const visited = new Uint8Array(size)
+  visited[startIndex] = 1
+  const queue = new Int32Array(size)
+  const dist = new Int32Array(size)
+  queue[0] = startIndex
+  let length = 1
 
   let head = 0
-  while (head < queue.length && queue.length < maxCount) {
-    const { cell, dist } = queue[head]
+  while (head < length && length < maxCount) {
+    const index = queue[head]
     head++
-    for (const direction of ALL_DIRECTIONS) {
-      let next = stepCell(cell, direction)
-      if (wrapEdges && !isInBounds(next, grid)) next = wrapCell(next, grid)
-      let key = cellKey(next)
-      if (portals.has(key)) {
-        next = portals.get(key)!
-        key = cellKey(next)
+    const x = index % cols
+    const y = (index - x) / cols
+    for (let d = 0; d < 4; d++) {
+      let nx = d === 2 ? x - 1 : d === 3 ? x + 1 : x
+      let ny = d === 0 ? y - 1 : d === 1 ? y + 1 : y
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) {
+        if (!wrapEdges) continue
+        nx = (nx + cols) % cols
+        ny = (ny + rows) % rows
       }
-      if (visited.has(key) || !isInBounds(next, grid) || isBlocked(key)) continue
-      if (targets.has(key)) return dist + 1
-      visited.add(key)
-      queue.push({ cell: next, dist: dist + 1 })
+      let next = ny * cols + nx
+      const exit = portalExit[next]
+      if (exit === -2) continue
+      if (exit >= 0) next = exit
+      if (visited[next] || blocked[next]) continue
+      if (isTarget[next]) return dist[index] + 1
+      visited[next] = 1
+      dist[next] = dist[index] + 1
+      queue[length++] = next
     }
   }
 
   return null
+}
+
+function markIndex(array: Uint8Array, index: number): void {
+  if (index >= 0) array[index] = 1
 }

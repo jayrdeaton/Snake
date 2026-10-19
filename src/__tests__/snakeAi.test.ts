@@ -1,7 +1,7 @@
 import { isOppositeDirection } from '@tastic/grid'
 
 import { Direction, GridCell, SnakeEntity, SnakeGameState, SnakePowerupPickup } from '@/types'
-import { applyCpuSnakePowerupActivation, applyCpuSnakeTurn, chooseCpuSnakeDirection, CpuDifficulty, shouldCpuActivateSnakePowerup } from '@/utils/snakeAi'
+import { applyCpuSnakePowerupActivation, applyCpuSnakeTurn, chooseCpuSnakeDirection, CPU_FLOOD_FILL_CAP, CpuDifficulty, shouldCpuActivateSnakePowerup } from '@/utils/snakeAi'
 import { buildSnakeOccupiedSet } from '@/utils/snakeEngine'
 
 // Fills in the fields every fixture needs regardless of what it's actually testing, so each call
@@ -33,6 +33,14 @@ function makeState(overrides: Partial<SnakeGameState> = {}): SnakeGameState {
 }
 
 const fixedRandom = (value: number) => () => value
+
+// How many in-bounds cells lie within `steps` moves of `from` on an open grid, i.e. how many cells a
+// breadth-first search visits before it reaches a target that far away.
+function countReachableCellsWithin(grid: { cols: number; rows: number }, from: GridCell, steps: number): number {
+  let count = 0
+  for (let x = 0; x < grid.cols; x++) for (let y = 0; y < grid.rows; y++) if (Math.abs(x - from.x) + Math.abs(y - from.y) < steps) count++
+  return count
+}
 
 describe('chooseCpuSnakeDirection', () => {
   it('never returns a direction that is an immediate 180-degree reversal of the current direction', () => {
@@ -163,6 +171,30 @@ describe('chooseCpuSnakeDirection - boosted lookahead (ownSteps)', () => {
 
     const twoStep = chooseCpuSnakeDirection({ snake: testSnake, grid: OPEN_GRID, occupied, difficulty: 'hard', food: foodAtRightLanding, ownSteps: 2 })
     expect(twoStep).not.toBe('right') // continuing right would die on the boosted second step
+  })
+})
+
+describe('chooseCpuSnakeDirection - food on a large board', () => {
+  it('heads for food more than CPU_FLOOD_FILL_CAP cells away', () => {
+    // An iPad 13" at the Large grid. The food sits 35 cells to the right along the top rows, and
+    // a breadth-first search from the head covers well over 900 cells before reaching it, so a
+    // capped distance search saw no food at all and the CPU just kept going straight (up).
+    const grid = { cols: 43, rows: 57 }
+    const testSnake = snake({
+      id: 1,
+      direction: 'up',
+      body: [
+        { x: 5, y: 7 },
+        { x: 5, y: 6 },
+        { x: 5, y: 5 }
+      ]
+    })
+    const occupied = new Set(testSnake.body.map((cell) => `${cell.x},${cell.y}`))
+    const food: GridCell = { x: 40, y: 5 }
+    expect(countReachableCellsWithin(grid, { x: 6, y: 5 }, 34)).toBeGreaterThan(CPU_FLOOD_FILL_CAP)
+
+    const result = chooseCpuSnakeDirection({ snake: testSnake, grid, occupied, difficulty: 'hard', food })
+    expect(result).toBe('right')
   })
 })
 
