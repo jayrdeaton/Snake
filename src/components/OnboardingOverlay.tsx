@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { ONBOARDING_COUNTDOWN_STEP_MS, ONBOARDING_FADE_MS, ONBOARDING_GO_HOLD_MS } from '@/constants/snake'
+import { useSeatSplit } from '@/hooks/useSeatSplit'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { SnakeId } from '@/types'
 
@@ -46,6 +47,7 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
   const opacity = useSharedValue(1)
   const [stageIndex, setStageIndex] = useState(0)
   const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
+  const split = useSeatSplit()
 
   const { playCountdownTick, playCountdownGo } = useSnakeSounds()
   const soundRef = useRef({ playCountdownTick, playCountdownGo })
@@ -110,9 +112,9 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
   // Mirrors TouchInputLayer.tsx's own zone split exactly (face-to-face: near/bottom = snake 1,
   // far/top = snake 2; side-by-side: whichever seat useOrientationState says is on the right gets
   // the right zone), so the countdown zones never disagree with where a swipe actually registers.
-  const isFaceToFace = orientationMode === 'faceToFace'
-  const snake1Zone = isFaceToFace ? styles.zoneBottom : p1OnRight ? styles.zoneRight : styles.zoneLeft
-  const snake2Zone = isFaceToFace ? styles.zoneTop : p1OnRight ? styles.zoneLeft : styles.zoneRight
+  const isFaceToFace = split.orientationMode === 'faceToFace'
+  const snake1Zone = isFaceToFace ? styles.zoneBottom : split.p1OnRight ? styles.zoneRight : styles.zoneLeft
+  const snake2Zone = isFaceToFace ? styles.zoneTop : split.p1OnRight ? styles.zoneLeft : styles.zoneRight
   const snake1Rotation = getFixedZoneRotation(orientationMode, p1OnRight, upsideDown)
   const snake2Rotation = getOpposingZoneRotation(snake1Rotation)
 

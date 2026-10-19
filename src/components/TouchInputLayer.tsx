@@ -1,6 +1,5 @@
 import { callWorkletCallback, useWorkletCallback } from '@rific/core'
 import { useVibration } from '@rific/feedback-press'
-import { useOrientationState } from '@tastic/core'
 import { applyControlInversion, isEffectiveTurn } from '@tastic/input'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { StyleSheet, View } from 'react-native'
@@ -8,6 +7,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SharedValue, useSharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
+import { useSeatSplit } from '@/hooks/useSeatSplit'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { Direction, SnakeId } from '@/types'
 import { resolveTurnIntent, TAP_MAX_DISTANCE } from '@/utils/turnIntent'
@@ -45,7 +45,7 @@ export interface TouchInputLayerProps {
 // it. The board underneath still stays one undivided render - only touch handling is zoned.
 export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, controlInverted, currentDirections }: TouchInputLayerProps) {
   const solo = mode === 'solo'
-  const { orientationMode, p1OnRight } = useOrientationState()
+  const { orientationMode, p1OnRight } = useSeatSplit()
 
   const { playTurn } = useSnakeSounds()
   const { selection } = useVibration()
@@ -164,8 +164,9 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
   }
 
   // Face-to-face: top/bottom split (snake 1 = near/bottom zone, since snake 1 is assumed to be the
-  // device's owner and the near zone faces them; snake 2 = far/top zone). Side-by-side: whichever
-  // seat is on the right (see useOrientationState) gets the right zone. Only 2 Player lands here:
+  // device's owner and the near zone faces them; snake 2 = far/top zone). Side-by-side (web, a wide
+  // window, only: a phone is always face-to-face, see useSeatSplit): whichever seat is on the right
+  // gets the right zone. Only 2 Player lands here:
   // game.tsx picks the mode from the number of humans, so Solo and Vs CPU (one human each) both use
   // the single full-board zone above, matching LightCycles' TouchInputLayer. While Lock Orientation
   // is on, the split holds still (tilting mid-match no longer moves it) along with the walls and

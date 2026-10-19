@@ -17,7 +17,7 @@
 // GameOverDialog until the slowest dying snake's fade finishes.
 import { getColorRoles, useAutoPaperTheme } from '@rific/auto-paper'
 import { Canvas, Circle, Group, Path, Rect, Skia, type SkPath } from '@shopify/react-native-skia'
-import { type OrientationMode, useOrientationState } from '@tastic/core'
+import { type OrientationMode } from '@tastic/core'
 import { cellToPixel } from '@tastic/grid'
 import { ObstacleRect } from '@tastic/sprites/shapes'
 import { Fragment, useEffect, useMemo, useRef } from 'react'
@@ -25,6 +25,7 @@ import { StyleSheet } from 'react-native'
 import { Easing, type SharedValue, useDerivedValue, useFrameCallback, useSharedValue, withSequence, withTiming } from 'react-native-reanimated'
 
 import { SNAKE_DEATH_FADE_BAND_CELLS, SNAKE_POWERUP_EFFECT_COLORS, SNAKE_POWERUP_PICKUP_RADIUS_RATIO, snakeDeathFadeMs } from '@/constants/snake'
+import { useSeatSplit } from '@/hooks/useSeatSplit'
 import { Direction, GridCell, GridSize, SnakeEntity, SnakeGameState, SnakeId, SnakePortal, SnakePowerupPickup, SnakeTunnel } from '@/types'
 
 export interface SnakeBoardProps {
@@ -1206,7 +1207,7 @@ function Walls({ snakes, grid, cellPx, wrapEdges, onboarding }: { snakes: SnakeE
   // already re-renders this subtree live on every tilt sample via TouchInputLayer's own identical
   // subscription (see that file's own header comment), so reading it here again doesn't introduce
   // any new re-render cost this board wasn't already paying.
-  const { orientationMode, p1OnRight } = useOrientationState()
+  const { orientationMode, p1OnRight } = useSeatSplit()
   if (wrapEdges || onboarding) return null
 
   const snake1 = snakes.find((s) => s.id === 1)

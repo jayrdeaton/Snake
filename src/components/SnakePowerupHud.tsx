@@ -1,8 +1,8 @@
-import { useOrientationState } from '@tastic/core'
 import { StyleSheet, View } from 'react-native'
 import { Icon } from 'react-native-paper'
 
 import { SNAKE_POWERUP_ICONS } from '@/constants/snake'
+import { useSeatSplit } from '@/hooks/useSeatSplit'
 import { SnakeEntity } from '@/types'
 
 export interface SnakePowerupHudProps {
@@ -32,7 +32,7 @@ function HeldItemBadge({ heldPowerup }: { heldPowerup: SnakeEntity['heldPowerup'
 // the badges still along with the board's walls and touch zones (_layout.tsx's OrientationProvider
 // freezes the shared reading app-wide).
 export function SnakePowerupHud({ snakes }: SnakePowerupHudProps) {
-  const { orientationMode, p1OnRight } = useOrientationState()
+  const { orientationMode, p1OnRight } = useSeatSplit()
   const snake1 = snakes.find((s) => s.id === 1)
   const snake2 = snakes.find((s) => s.id === 2)
   const isFaceToFace = orientationMode === 'faceToFace'

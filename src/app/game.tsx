@@ -25,6 +25,7 @@ import { ACHIEVEMENT_TIER_COLORS } from '@/constants/achievements'
 import { DESKTOP_WEB_MIN_WIDTH, MAX_BOARD_CONTENT_WIDTH, SNAKE_CELL_PX, SNAKE_GAME_OVER_DIALOG_HOLD_MS, snakeDeathFadeMs } from '@/constants/snake'
 import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
+import { useSeatSplit } from '@/hooks/useSeatSplit'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { SnakeMode, useSnakeState } from '@/hooks/useSnakeState'
 import { liveplayActions } from '@/redux/liveplaySlice'
@@ -582,6 +583,7 @@ interface GameActionChipsProps {
 // branch shows, and where, stays put for as long as the lock is on.
 function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlayerCount, desktopWeb }: GameActionChipsProps) {
   const { orientationMode, p1OnRight, upsideDown } = useOrientationState()
+  const seatSplit = useSeatSplit()
   const insets = useSafeAreaInsets()
   const { dark } = useAutoPaperTheme()
   const fg = dark ? '#FFFFFF' : '#000000'
@@ -589,7 +591,7 @@ function GameActionChips({ showBack, showSettings, onBack, onSettings, humanPlay
 
   if (!showBack && !showSettings) return null
 
-  const neutral = !desktopWeb && needsSharedNeutralZone(orientationMode, humanPlayerCount)
+  const neutral = !desktopWeb && needsSharedNeutralZone(seatSplit.orientationMode, humanPlayerCount)
 
   if (neutral) {
     const rotation = getFixedZoneRotation(orientationMode, p1OnRight, upsideDown)

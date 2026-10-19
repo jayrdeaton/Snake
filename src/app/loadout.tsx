@@ -6,7 +6,7 @@ import { avoidSeatColorClash, type Profile, profileSeatColor } from '@tastic/pro
 import { DualZoneLayout, needsSharedNeutralZone, useDualZoneLayout } from '@tastic/split-screen'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Platform, StyleSheet, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useDispatch, useSelector } from 'react-redux'
@@ -125,7 +125,13 @@ export default function LoadoutScreen() {
   const p2IsHuman = routeMode === 'twoPlayer'
 
   const { orientationMode, p1OnRight, upsideDown, resolved: p1OnRightResolved } = useOrientationState()
-  const { panelLayout, panelFadeStyle } = useDualZoneLayout(orientationMode, p1OnRight, p1OnRightResolved, upsideDown, PANEL_SWAP_FADE_MS)
+  // On a phone, 2 Player stays face-to-face however it's held: P1 in the bottom half, P2 in the top
+  // half, the same split /game's touch zones use there (see useSeatSplit), so each player gets the
+  // same half of the phone here and in the match. Following the tilt used to put P1 at the phone's
+  // top end (landscape or upside down) and then move them on Ready. Web follows the window here and
+  // in /game alike.
+  const fixedSeats = p2IsHuman && Platform.OS !== 'web'
+  const { panelLayout, panelFadeStyle } = useDualZoneLayout(fixedSeats ? 'faceToFace' : orientationMode, fixedSeats ? true : p1OnRight, fixedSeats || p1OnRightResolved, fixedSeats ? false : upsideDown, PANEL_SWAP_FADE_MS)
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const rotation = getViewRotation(panelLayout.orientationMode, panelLayout.p1OnRight, panelLayout.upsideDown)
