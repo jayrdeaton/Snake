@@ -1,0 +1,59 @@
+{
+  "font": "../node_modules/@expo-google-fonts/fredoka/600SemiBold/Fredoka_600SemiBold.ttf",
+  "out": "screenshots",
+  "raw": "screenshots/raw",
+  "shots": [
+    {
+      "name": "01-solo",
+      "title": "Classic Snake, No Ads",
+      "sub": "Eat, grow, and don't crash"
+    },
+    {
+      "name": "02-twoplayer",
+      "title": "Two Players, One Phone",
+      "sub": "Face to face, both at once"
+    },
+    {
+      "name": "03-arena",
+      "title": "Five Arenas to Master",
+      "sub": "Pillars, Portals, and more"
+    },
+    {
+      "name": "04-powerups",
+      "title": "Six Optional Powerups",
+      "sub": "Grab one, then tap to use it"
+    },
+    {
+      "name": "05-loadout",
+      "title": "Pick Your Player",
+      "sub": "Profiles with their own colors"
+    },
+    {
+      "name": "06-highscore",
+      "title": "Beat Your High Score",
+      "sub": "Every bite makes you longer",
+      "device": "iphone"
+    },
+    {
+      "name": "06-highscore",
+      "title": "Beat Your High Score",
+      "sub": "Every bite makes you longer",
+      "device": "iphone-medium"
+    },
+    {
+      "name": "06-results",
+      "title": "A Result for Each Player",
+      "sub": "Face to face, after every round",
+      "device": "ipad"
+    },
+    {
+      "name": "07-stats",
+      "title": "Stats and Achievements",
+      "sub": "33 to earn, bronze to gold"
+    }
+  ],
+  "background": [
+    "#12351a",
+    "#040a05"
+  ]
+}

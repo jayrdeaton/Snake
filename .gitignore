@@ -67,3 +67,7 @@ coverage/
 
 # in / out
 *.txt
+# App Store screenshots and art (build output), and the seed made from the app
+store/screenshots/
+store/seed/seed.json
+store/apple/
