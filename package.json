@@ -43,7 +43,7 @@
     "@rific/gestures": "^0.1.3",
     "@rific/scroll-view": "^1.1.2",
     "@rific/splash-gate": "^0.2.3",
-    "@rific/toaster": "^0.10.0",
+    "@rific/toaster": "^0.10.1",
     "@rific/updater": "^0.7.1",
     "@shopify/flash-list": "2.3.2",
     "@shopify/react-native-skia": "2.14.0",

@@ -9,7 +9,12 @@ import { Platform } from 'react-native'
 // landscape tilt used to split the phone lengthwise (left/right of the portrait frame), which the
 // loadout can't show. Web follows the window's shape (a wide window splits left/right), where the
 // loadout follows it too. Only placement: text and glyph rotation still read useOrientationState.
-export function useSeatSplit(): { orientationMode: OrientationMode; p1OnRight: boolean } {
+export interface SeatSplit {
+  orientationMode: OrientationMode
+  p1OnRight: boolean
+}
+
+export function useSeatSplit(): SeatSplit {
   const { orientationMode, p1OnRight } = useOrientationState()
   return Platform.OS === 'web' ? { orientationMode, p1OnRight } : { orientationMode: 'faceToFace', p1OnRight: true }
 }

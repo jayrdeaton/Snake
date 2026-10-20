@@ -58,13 +58,15 @@ const CPU_DIFFICULTY_OPTIONS: LabeledDropdownOption<CpuDifficultyChoice>[] = [
 // Left icon-less, mirroring LightCycles' own KEY_SCHEME_OPTIONS (LobbyPlayerPanel.tsx) exactly -
 // there's no MaterialCommunityIcons glyph that reads as "WASD" or "IJKL" at a glance the way
 // CPU_DIFFICULTY_OPTIONS' icons do for a difficulty, so mixing one iconned option (Mouse) in with
-// four icon-less ones would look like an inconsistency rather than a real distinction.
+// four icon-less ones would look like an inconsistency rather than a real distinction. Each label
+// also names the scheme's powerup key (resolveControlSchemeActivate in utils/keyboardControls.ts),
+// which nothing else on screen says. The same five as LightCycles' lobby.
 const CONTROL_SCHEME_OPTIONS: MenuOption<ControlScheme>[] = [
-  { value: 'mouse', label: 'Mouse' },
-  { value: 'wasd', label: 'WASD' },
-  { value: 'arrows', label: 'Arrows' },
-  { value: 'ijkl', label: 'IJKL' },
-  { value: 'numpad', label: 'Numpad' }
+  { value: 'mouse', label: 'Mouse+Click' },
+  { value: 'wasd', label: 'WASD+Q' },
+  { value: 'arrows', label: 'Arrows+Space' },
+  { value: 'ijkl', label: 'IJKL+U' },
+  { value: 'numpad', label: 'Numpad+Enter' }
 ]
 
 // Same "bundled multi-select, not two boolean-shaped single-selects" technique LightCycles' own

@@ -5,7 +5,7 @@ import { useToast } from '@rific/toaster'
 import { broadcastDeviceUnlocks, resultFor } from '@tastic/achievements'
 import { computeContentBounds, FakeLandscapeView, getFixedZoneRotation, getViewRotation, rotateInsets, useBackgroundPause, useOrientationState, useRotation, useSettledWindowDimensions } from '@tastic/core'
 import { computeGridSize } from '@tastic/grid'
-import { type AchievementUnlockOwner, ConfirmDialog, useQuitConfirmation } from '@tastic/hud'
+import { ConfirmDialog, useQuitConfirmation } from '@tastic/hud'
 import { needsSharedNeutralZone } from '@tastic/split-screen'
 import { useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -17,22 +17,24 @@ import { useDispatch, useSelector } from 'react-redux'
 import { GameOverDialog, type GameOverOutcome, type GameOverSeatResult } from '@/components/GameOverDialog'
 import KeyboardInputLayer from '@/components/KeyboardInputLayer'
 import OnboardingOverlay from '@/components/OnboardingOverlay'
+import { SeatToasters } from '@/components/SeatToasters'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { SnakeBoard } from '@/components/SnakeBoard'
 import { SnakePowerupHud } from '@/components/SnakePowerupHud'
 import TouchInputLayer, { TouchInputMode } from '@/components/TouchInputLayer'
-import { ACHIEVEMENT_TIER_COLORS } from '@/constants/achievements'
 import { DESKTOP_WEB_MIN_WIDTH, MAX_BOARD_CONTENT_WIDTH, SNAKE_CELL_PX, SNAKE_GAME_OVER_DIALOG_HOLD_MS, snakeDeathFadeMs } from '@/constants/snake'
 import { useGameStats } from '@/hooks/useGameStats'
 import { useProfiles } from '@/hooks/useProfiles'
 import { useSeatSplit } from '@/hooks/useSeatSplit'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
 import { SnakeMode, useSnakeState } from '@/hooks/useSnakeState'
+import { SEAT_TOAST_STACKS, useUnlockToasts } from '@/hooks/useUnlockToasts'
 import { liveplayActions } from '@/redux/liveplaySlice'
 import { DEFAULT_SETTINGS } from '@/redux/settingsSlice'
 import type { RootState } from '@/redux/store'
-import { AchievementDefinition, Direction, GamePhase, ProfileStats, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
+import { Direction, GamePhase, ProfileStats, SnakeId, SnakePowerupType, SnakeRoundSettings } from '@/types'
 import { safeBack } from '@/utils/navigation'
+import { seatToastSpots } from '@/utils/seatToastSpots'
 import type { SeatRoundOutcome } from '@/utils/statsEngine'
 import { DEFAULT_PROFILE_STATS } from '@/utils/statsValidation'
 
@@ -40,6 +42,8 @@ import { DEFAULT_PROFILE_STATS } from '@/utils/statsValidation'
 // below for why this is passed instead of the device's real insets whenever the board isn't
 // actually bleeding under them.
 const ZERO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 }
+// Solo and Vs CPU have one human, seat 1.
+const SOLO_SEATS: readonly SnakeId[] = [1]
 
 export default function GameScreen() {
   const params = useLocalSearchParams<{ mode?: string | string[]; p1Color?: string | string[]; p2Color?: string | string[] }>()
@@ -96,7 +100,8 @@ export default function GameScreen() {
   const controlScheme = activeRoundSettings.controlScheme
   const { recordRoundOutcome, stats } = useGameStats()
   const { lastSelected, profiles } = useProfiles()
-  const { clear: clearToasts, success: showAchievementToast } = useToast()
+  const { clear: clearToasts } = useToast()
+  const showUnlockToasts = useUnlockToasts()
   const dispatch = useDispatch()
 
   // Bundled once via useMemo: see types/index.ts's own SnakeRoundSettings comment for why this is
@@ -289,14 +294,13 @@ export default function GameScreen() {
   // to false the moment recordRoundOutcome below actually lands.
   const hasRecordedRef = useRef(false)
   const [newHighScoreSeats, setNewHighScoreSeats] = useState<Partial<Record<SnakeId, boolean>>>({})
-  // 2 Player only: seat -> whatever that seat's own profile newly unlocked this round, read by
-  // GameOverDialog to show each seat's own achievements on that seat's own card (seat 2 sits
-  // rotated 180° from seat 1 in this screen's face-to-face layout, so a shared, screen-fixed
-  // showAchievementToast below it is only ever right-side-up for whoever's seat 1). Always
-  // overwritten every round, even to {}, same as LightCycles' identical profileUnlockToast:
-  // GameOverDialog stays on screen far longer than a toast's own auto-dismiss, so a stale badge from
-  // the previous round can't rely on that to clear itself.
-  const [achievementUnlocks, setAchievementUnlocks] = useState<Partial<Record<SnakeId, AchievementDefinition[]>>>({})
+  // Where each 2 Player seat's unlock toasts go (SeatToasters below): the half of the screen that's
+  // theirs, turned the way they read it, so seat 2, rotated 180° from seat 1 face to face, reads its
+  // own the right way up, and players side by side each get theirs on their own side. Lock
+  // Orientation freezes the reading this comes from, as it does the countdown's.
+  const seatSplit = useSeatSplit()
+  const orientation = useOrientationState()
+  const seatSpots = useMemo(() => seatToastSpots({ orientationMode: seatSplit.orientationMode, p1OnRight: seatSplit.p1OnRight }, { orientationMode: orientation.orientationMode, p1OnRight: orientation.p1OnRight, upsideDown: orientation.upsideDown }), [seatSplit.orientationMode, seatSplit.p1OnRight, orientation.orientationMode, orientation.p1OnRight, orientation.upsideDown])
 
   useEffect(() => {
     if (phase !== 'gameOver') {
@@ -336,22 +340,16 @@ export default function GameScreen() {
     // back as {}.
     const seatUnlocks = broadcastDeviceUnlocks(humanPlayers, unlocked.profiles, unlocked.device, profileIds, { winners: mode === 'twoPlayer' && winner !== null ? [winner] : undefined })
 
-    // 2 Player: both seats are human and physically opposite each other, so each seat's
-    // GameOverDialog card shows its own list. Solo/Vs CPU never populate this (see
-    // achievementUnlocks' own comment above).
-    setAchievementUnlocks(mode === 'twoPlayer' ? seatUnlocks : {})
-
-    // Solo/Vs CPU: only ever one human perspective to address (Solo has no seat 2 at all; Vs CPU's
-    // seat 2 is the CPU and never earns a profile unlock of its own), so the existing screen-fixed
-    // toast is already always right-side-up for whoever's looking - no reason to route these into
-    // the dialog too.
-    if (mode !== 'twoPlayer') {
-      ;(seatUnlocks[1] ?? []).forEach((achievement) => {
-        showAchievementToast(achievement.title, 'Achievement unlocked', undefined, { color: ACHIEVEMENT_TIER_COLORS[achievement.tier], icon: achievement.icon })
-      })
-    }
+    // Toasts, each named for its seat's profile (see useUnlockToasts). 2 Player: both seats are
+    // human and often physically opposite each other, so each seat's go to its own Toaster, in its
+    // half of the screen and turned to face it (seatSpots above). Solo/Vs CPU: only ever one human perspective to address (Solo has no
+    // seat 2 at all; Vs CPU's seat 2 is the CPU and never earns a profile unlock of its own), so the
+    // app's screen-fixed toast is already right-side-up for whoever's looking.
+    const ownerName = (seat: SnakeId) => profiles.find((p) => p.id === lastSelected[seat])?.name
+    if (mode === 'twoPlayer') showUnlockToasts(seatUnlocks, humanPlayers, { 1: ownerName(1), 2: ownerName(2) }, SEAT_TOAST_STACKS)
+    else showUnlockToasts(seatUnlocks, SOLO_SEATS, { 1: ownerName(1) })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- state.snakes is read once per gameOver entry, matching the roundOver effect below; adding it would re-run this on every tick.
-  }, [phase, mode, stats, humanPlayers, winner, cpuDifficulty, lastSelected, recordRoundOutcome, showAchievementToast])
+  }, [phase, mode, stats, humanPlayers, winner, cpuDifficulty, lastSelected, profiles, recordRoundOutcome, showUnlockToasts])
 
   // Crash sound + haptic - fires once, the instant the engine's own state.phase (not the derived,
   // onboarding-aware `phase` above) flips into 'roundOver', mirroring LightCycles' own immediate
@@ -431,12 +429,8 @@ export default function GameScreen() {
   const { dark } = useAutoPaperTheme()
   const bg = dark ? '#000000' : '#FFFFFF'
   const fgMuted = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'
-  // Marks each seat's rows in GameOverDialog's 2 Player unlock list: the seat's profile if one is
-  // selected, else a plain avatar in that snake's color.
-  const achievementOwners: Record<SnakeId, AchievementUnlockOwner> = {
-    1: { profile: profiles.find((p) => p.id === lastSelected[1]), color: state.snakes[0]?.color ?? fgMuted },
-    2: { profile: profiles.find((p) => p.id === lastSelected[2]), color: state.snakes[1]?.color ?? fgMuted }
-  }
+  // Each seat's snake color, tinting its GameOverDialog card's zone and Retry.
+  const seatColor = (seat: SnakeId): string => state.snakes[seat - 1]?.color ?? fgMuted
 
   // One 2 Player seat's own card on GameOverDialog: its own result, its score against the other
   // seat's, and its own bucket's best (see seatStats above).
@@ -448,7 +442,7 @@ export default function GameScreen() {
       opponentScore: state.snakes.find((s) => s.id !== seat)?.score ?? 0,
       highScore: Math.max(seatStats(seat).byMode.twoPlayer.bestScore, score),
       isNewHighScore: newHighScoreSeats[seat] ?? false,
-      color: achievementOwners[seat].color
+      color: seatColor(seat)
     }
   }
 
@@ -517,9 +511,9 @@ export default function GameScreen() {
       hook of their own, so unmounting is what stops them ticking underneath any of those dialogs,
       and remounting on close is what restarts the count from '3' instead of resuming mid-count with
       stale timers. */}
-      {phase === 'onboarding' && !paused && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} />}
+      {phase === 'onboarding' && !paused && state.snakes[0] && <OnboardingOverlay onComplete={handleBeginPlaying} humanPlayers={humanPlayers} seatSpots={mode === 'twoPlayer' ? seatSpots : undefined} colors={state.snakes[1] ? { snake1: state.snakes[0].color, snake2: state.snakes[1].color } : { snake1: state.snakes[0].color }} />}
 
-      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(seatStats(1).byMode[mode].bestScore, humanScore)} isNewHighScore={newHighScoreSeats[1] ?? false} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} achievementUnlocks={mode === 'twoPlayer' ? achievementUnlocks : undefined} achievementOwners={achievementOwners} seatResults={mode === 'twoPlayer' && state.outcome ? { 1: gameOverSeatResult(1), 2: gameOverSeatResult(2) } : undefined} rotation={overlayRotation} />}
+      {phase === 'gameOver' && showGameOverDialog && <GameOverDialog score={humanScore} highScore={Math.max(seatStats(1).byMode[mode].bestScore, humanScore)} isNewHighScore={newHighScoreSeats[1] ?? false} onRetry={handleRetry} onHome={safeBack} outcome={gameOverOutcome} opponentScore={mode !== 'solo' ? opponentScore : undefined} seatResults={mode === 'twoPlayer' && state.outcome ? { 1: gameOverSeatResult(1), 2: gameOverSeatResult(2) } : undefined} seatSpots={seatSpots} rotation={overlayRotation} />}
 
       {/* Kept as its own sibling of the board/gesture tree above, mirroring LightCycles'/BoxHockey's
       identically-motivated MatchOverlays split - this live tilt subscription's re-renders should
@@ -529,6 +523,10 @@ export default function GameScreen() {
       round beyond GameOverDialog's own Home button. */}
       <GameActionChips showBack={controlsVisible} showSettings={controlsVisible} onBack={requestBack} onSettings={() => setSettingsOpen(true)} humanPlayerCount={humanPlayers.length} desktopWeb={isDesktopWeb} />
       <SettingsDialog visible={settingsOpen} onDismiss={() => setSettingsOpen(false)} rotation={overlayRotation} />
+
+      {/* 2 Player's unlock toasts, a Toaster per seat turned to face it (see the gameOver effect
+      above); every other toast stays on the app's main Toaster (Providers.tsx). */}
+      {mode === 'twoPlayer' && <SeatToasters spots={seatSpots} />}
 
       {/* Fleet-shared @tastic/hud ConfirmDialog, matching BoxHockey's/AirHockey's/LightCycles'/
       Pong's identical "Quit Match?" prompt - see onBackPress's own comment above for why it's

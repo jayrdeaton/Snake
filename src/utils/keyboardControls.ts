@@ -13,8 +13,8 @@ export function resolveControlSchemeDirection(event: Pick<KeyboardEvent, 'key' |
 }
 
 // Powerup activation key per scheme - one unused-by-movement key per layout, mirroring
-// LightCycles' identical ACTIVATE_KEYS map (wasd/arrows/ijkl match its exact choices) plus a 4th
-// entry for numpad, the one scheme LightCycles has no equivalent of. 'mouse' has no key of its own
+// LightCycles' identical ACTIVATE_KEYS map (constants/game.ts). Numpad's key (NumpadEnter) is
+// matched by code below, in both games. 'mouse' has no key of its own
 // (a stationary click/tap already becomes the activate gesture in TouchInputLayer.tsx instead).
 const ACTIVATE_KEYS: Record<'wasd' | 'arrows' | 'ijkl', string> = { wasd: 'q', arrows: ' ', ijkl: 'u' }
 

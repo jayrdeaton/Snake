@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
+import type { SeatToastSpot } from '@/components/SeatToasters'
 import { ONBOARDING_COUNTDOWN_STEP_MS, ONBOARDING_FADE_MS, ONBOARDING_GO_HOLD_MS } from '@/constants/snake'
 import { useSeatSplit } from '@/hooks/useSeatSplit'
 import { useSnakeSounds } from '@/hooks/useSnakeSounds'
@@ -27,6 +28,10 @@ export interface OnboardingOverlayProps {
   // color only actually gets used below when humanPlayers.length is 2 - i.e. Vs CPU's own CPU-
   // colored zone is simply never rendered, matching the single-zone branch not needing it).
   colors: { snake1: string; snake2?: string }
+  // 2 Player: each seat's half and reading angle (game.tsx's seatSpots, from seatToastSpots), the
+  // same spots its result card and unlock toasts use. On a phone that's the split and turn below; in
+  // a browser window wider than tall, the players sit side by side, so both read it upright.
+  seatSpots?: Record<SnakeId, SeatToastSpot>
 }
 
 const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
@@ -42,7 +47,7 @@ const COUNTDOWN_STAGES = ['3', '2', '1', 'GO!']
 // its countdown too) are different enough that folding them into one shared prop wouldn't simplify
 // anything here. Lock Orientation needs no handling of its own: _layout.tsx's OrientationProvider
 // freezes the shared reading both branches come from.
-export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: OnboardingOverlayProps) {
+export default function OnboardingOverlay({ onComplete, humanPlayers, colors, seatSpots }: OnboardingOverlayProps) {
   const { fonts } = useAutoPaperTheme()
   const opacity = useSharedValue(1)
   const [stageIndex, setStageIndex] = useState(0)
@@ -113,10 +118,11 @@ export default function OnboardingOverlay({ onComplete, humanPlayers, colors }: 
   // far/top = snake 2; side-by-side: whichever seat useOrientationState says is on the right gets
   // the right zone), so the countdown zones never disagree with where a swipe actually registers.
   const isFaceToFace = split.orientationMode === 'faceToFace'
-  const snake1Zone = isFaceToFace ? styles.zoneBottom : split.p1OnRight ? styles.zoneRight : styles.zoneLeft
-  const snake2Zone = isFaceToFace ? styles.zoneTop : split.p1OnRight ? styles.zoneLeft : styles.zoneRight
-  const snake1Rotation = getFixedZoneRotation(orientationMode, p1OnRight, upsideDown)
-  const snake2Rotation = getOpposingZoneRotation(snake1Rotation)
+  const zoneStyles = { bottom: styles.zoneBottom, left: styles.zoneLeft, right: styles.zoneRight, top: styles.zoneTop }
+  const snake1Zone = seatSpots ? zoneStyles[seatSpots[1].zone] : isFaceToFace ? styles.zoneBottom : split.p1OnRight ? styles.zoneRight : styles.zoneLeft
+  const snake2Zone = seatSpots ? zoneStyles[seatSpots[2].zone] : isFaceToFace ? styles.zoneTop : split.p1OnRight ? styles.zoneLeft : styles.zoneRight
+  const snake1Rotation = seatSpots ? seatSpots[1].rotation : getFixedZoneRotation(orientationMode, p1OnRight, upsideDown)
+  const snake2Rotation = seatSpots ? seatSpots[2].rotation : getOpposingZoneRotation(snake1Rotation)
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]} pointerEvents='none'>
