@@ -2,7 +2,7 @@ import { callWorkletCallback, useWorkletCallback } from '@rific/core'
 import { useVibration } from '@rific/feedback-press'
 import { applyControlInversion, isEffectiveTurn } from '@tastic/input'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Platform, StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { SharedValue, useSharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
@@ -62,6 +62,26 @@ export default function TouchInputLayer({ mode, enabled, onTurn, onActivate, con
   useEffect(() => {
     latestRef.current = { onTurn, onActivate, controlInverted, currentDirections, playTurn, selection }
   })
+
+  // Web: turns off the browser's own touch gestures (pinch-zoom, pan, pull-to-refresh, overscroll
+  // swipe-to-navigate) for as long as the board is up. Without this, two players touching a
+  // touchscreen laptop at once (a Surface, in 2 Player) read as a pinch: the page zoomed in, the
+  // board's bottom edge and its wall slid off screen, and a snake crashed into a wall nobody could
+  // see. The same body styles as LightCycles' TouchInputLayer.web.tsx, but held for the whole
+  // screen, not only while turns are live, so a pinch during the countdown or on the result cards
+  // can't zoom either.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const { style } = document.body
+    const previousTouchAction = style.touchAction
+    const previousOverscrollBehavior = style.overscrollBehavior
+    style.touchAction = 'none'
+    style.overscrollBehavior = 'none'
+    return () => {
+      style.touchAction = previousTouchAction
+      style.overscrollBehavior = previousOverscrollBehavior
+    }
+  }, [])
 
   const handleTurn = useCallback((snakeId: SnakeId, direction: Direction) => {
     const { onTurn, controlInverted, currentDirections, playTurn, selection } = latestRef.current

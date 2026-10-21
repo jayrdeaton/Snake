@@ -13,7 +13,7 @@ A classic Snake game with Solo, Vs CPU, and local simultaneous split-screen 2 Pl
 ```bash
 npm run lint          # expo lint .
 npm run fix            # expo lint . --fix
-npm test               # Jest (29 suites, 298 tests)
+npm test               # Jest (29 suites, 300 tests)
 npm run test:watch     # Jest --watchAll
 npm run typecheck      # tsc
 npm run verify         # lint + test + typecheck
@@ -331,3 +331,8 @@ Jay: the 2 Player result cards' two buttons sit side by side on hud's action row
 ## Control schemes match LightCycles' (2026-10-20)
 
 The loadout's control picker names each scheme's powerup key: Mouse+Click, WASD+Q, Arrows+Space, IJKL+U, Numpad+Enter. LightCycles' lobby has the same five (it gained Mouse and Numpad that day). Keep both games' lists whole: every game gets every scheme, and removing one players already use is a regression (Jay). Not checked live.
+
+## Touchscreen browsers: no pinch-zoom on /game (2026-10-20)
+
+Jay's kids, playing 2 Player in a browser on a Microsoft Surface, drove a snake past the bottom wall line and crashed into an invisible wall further down. The engine and the drawn wall agree (checked live on web at several window sizes, a mid-round resize included). The cause was the browser: nothing on /game set `touch-action`, so two players touching the screen at once read as a pinch, the page zoomed in, and the bottom of the board, wall included, slid off screen. LightCycles never had this because its `TouchInputLayer.web.tsx` sets `document.body.style.touchAction = 'none'`. `TouchInputLayer.tsx` now sets `touchAction` and `overscrollBehavior` to `none` on the body for as long as it is mounted (web only), restoring both on unmount, so pinch, pan and pull-to-refresh are off through the countdown and result cards too, not only mid-round. Pinned by `TouchInputLayer.test.tsx`. A page that was already zoomed stays zoomed until it is reloaded or pinched back out on another screen. JS only, so it ships in the next web deploy. Not checked on a touchscreen.
+

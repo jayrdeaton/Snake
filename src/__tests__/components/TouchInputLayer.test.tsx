@@ -71,3 +71,42 @@ describe('TouchInputLayer tap-to-activate', () => {
     expect(TAP_MAX_DISTANCE).toBeLessThan(MIN_SWIPE_DISTANCE)
   })
 })
+
+// A touchscreen browser (a Surface in 2 Player) read two players' touches as a pinch and zoomed the
+// page, pushing the board's bottom wall off screen while the snake kept going toward it. The tests
+// run without a DOM, so a stand-in document.body.style is enough to read what the layer sets.
+describe('TouchInputLayer browser touch gestures', () => {
+  const { Platform } = jest.requireActual<typeof import('react-native')>('react-native')
+  const originalOS = Platform.OS
+  const globals = globalThis as unknown as { document?: { body: { style: Record<string, string> } } }
+  let style: Record<string, string>
+
+  beforeEach(() => {
+    style = { touchAction: 'pan-y', overscrollBehavior: '' }
+    globals.document = { body: { style } }
+  })
+
+  afterEach(() => {
+    Platform.OS = originalOS
+    delete globals.document
+  })
+
+  async function renderLayer() {
+    return render(<TouchInputLayer mode='dual' enabled={false} onTurn={jest.fn()} onActivate={jest.fn()} controlInverted={{ 1: false, 2: false }} currentDirections={{ 1: 'up', 2: 'up' }} />)
+  }
+
+  it('turns off pinch-zoom and pan on web while mounted, even between rounds, and restores them on unmount', async () => {
+    Platform.OS = 'web'
+    const { unmount } = await renderLayer()
+    expect(style.touchAction).toBe('none')
+    expect(style.overscrollBehavior).toBe('none')
+    await unmount()
+    expect(style.touchAction).toBe('pan-y')
+    expect(style.overscrollBehavior).toBe('')
+  })
+
+  it('leaves the page alone on native', async () => {
+    await renderLayer()
+    expect(style.touchAction).toBe('pan-y')
+  })
+})

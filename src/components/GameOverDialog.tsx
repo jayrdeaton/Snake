@@ -64,7 +64,9 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
   // Quit is outlined, the fleet's secondary action (ConfirmDialog's Cancel), so Play Again is the one
   // filled button and the easier reach (see button ordering below, same as LightCycles'
   // RoundOverDialog Quit/Play Again pair). It used to be a fixed gray fill, which stopped matching once
-  // the card took the theme's tinted surface.
+  // the card took the theme's tinted surface. Its label is the card's own text color, not Paper's
+  // default (the theme's primary), so neither seat's card shows a color that isn't its own (Jay,
+  // 2026-10-20).
 
   if (seatResults) {
     // OnboardingOverlay's two-zone split and rotations exactly (face-to-face: snake 1 near/bottom,
@@ -122,7 +124,7 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
           for both. Side by side keeps the card short, leaving room in the half for that seat's unlock
           toasts (Jay, 2026-10-20). */}
           <View style={overlayActionStyles.actions}>
-            <Button mode='outlined' onPress={onHome} style={overlayActionStyles.actionButton}>
+            <Button mode='outlined' onPress={onHome} style={overlayActionStyles.actionButton} textColor={fg}>
               Quit
             </Button>
             <Button mode='contained' onPress={onRetry} style={overlayActionStyles.actionButton} buttonColor={result.color} textColor={onColors[seat]}>
@@ -197,7 +199,7 @@ export function GameOverDialog({ score, highScore, isNewHighScore, onRetry, onHo
         {/* hud's action row, as in ConfirmDialog: Quit (outlined) on the left, Play Again (filled) on the
         right, side by side, as on the 2 Player seat cards above (Jay, 2026-10-20). */}
         <View style={overlayActionStyles.actions}>
-          <Button mode='outlined' onPress={onHome} style={overlayActionStyles.actionButton}>
+          <Button mode='outlined' onPress={onHome} style={overlayActionStyles.actionButton} textColor={fg}>
             Quit
           </Button>
           <Button mode='contained' onPress={onRetry} style={overlayActionStyles.actionButton} buttonColor={colors.primary} textColor={colors.onPrimary}>
