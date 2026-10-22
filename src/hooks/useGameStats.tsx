@@ -7,7 +7,7 @@ import type { RootState } from '@/redux/store'
 import { AchievementDefinition, SnakeId, StatsState, UnlockedAchievementsState } from '@/types'
 import { applyRoundOutcome, getProfileStatsView, RoundContext, RoundOutcome } from '@/utils/statsEngine'
 
-// Returned by recordRoundOutcome below - `device` is the device-wide/"All Profiles" newly-unlocked
+// Returned by recordRoundOutcome below - `device` is the device-wide/"Everyone" newly-unlocked
 // list (no seat owner), `profiles` is a parallel per-seat breakdown of whatever THAT seat's own
 // profile newly unlocked. Solo/Vs CPU merge both into one flat toast list at the call site
 // (game.tsx) - only 2 Player needs the seat split, to show each unlock next to the seat that
