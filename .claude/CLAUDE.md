@@ -27,6 +27,10 @@ Always run `npm run lint` before finishing any task. This is an app (`"private":
 
 **Builds and OTA updates:** the `build` and `update` scripts are plain `eas build` and `eas update`, with profiles in `eas.json` (`development`, `preview`, `production`). Pass the profile through, e.g. `npm run build -- --profile preview` or `npm run update -- --branch production --environment production --message "..."`. Nothing in them runs `verify`, so run `npm run verify` first. An OTA update also bumps `otaVersion` in `src/constants/release.ts` (the version label players see), committed before publishing. They used to be `@rific/updater`'s `rific-updater-build`/`rific-updater-update` bins, which @rific/updater 0.7.0 removed; the package stays for its OTA update hook. `build:web` is the one exception: it chains `npm run verify &&` before the web export (see "Web on games.infinitetoken.com" below).
 
+## Commits
+
+Commits carry no `Co-Authored-By` or `Claude-Session` lines, and are authored and committed as Jay Deaton, with the same email as main's commits (`git log -1 origin/main --format='%an <%ae>'`), never as Claude (Jay, 2026-10-25). In a fresh cloud checkout, set `git config user.name` and `user.email` to those before the first commit.
+
 ## Tooling
 
 Onboarded onto the shared `@infinitetoken` config packages (`eslint-config`, `jest-config`, `tsconfig`) - previously hand-rolled its own `eslint-config-expo`-based config, `jest-expo`-preset-direct config, and `expo/tsconfig.base`-extending tsconfig (the same boilerplate pattern documented in [Swirlio](../Swirlio/.claude/CLAUDE.md)'s and [BoxHockey](../BoxHockey/.claude/CLAUDE.md)'s CLAUDE.md).
